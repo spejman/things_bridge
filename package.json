@@ -1,8 +1,15 @@
 {
   "name": "things_bridge",
-  "module": "index.ts",
   "type": "module",
   "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:api": "bun --hot packages/linux-api/src/index.ts",
+    "dev:agent": "bun --hot packages/mac-agent/src/index.ts",
+    "start:api": "bun packages/linux-api/src/index.ts",
+    "start:agent": "bun packages/mac-agent/src/index.ts",
+    "test": "bun test"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

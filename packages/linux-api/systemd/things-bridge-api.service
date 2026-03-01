@@ -1,0 +1,15 @@
+[Unit]
+Description=Things Bridge API Service
+After=network.target
+
+[Service]
+Type=simple
+User=things-bridge
+WorkingDirectory=/opt/things-bridge/packages/linux-api
+EnvironmentFile=/etc/things-bridge/api.env
+ExecStart=/usr/local/bin/bun /opt/things-bridge/packages/linux-api/src/index.ts
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

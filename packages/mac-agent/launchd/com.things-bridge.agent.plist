@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.things-bridge.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/bun</string>
+        <string>/Users/USERNAME/things-bridge/packages/mac-agent/src/index.ts</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>API_URL</key>
+        <string>http://your-linux-server:3000</string>
+        <key>AGENT_TOKEN</key>
+        <string>your-token</string>
+        <key>AGENT_ID</key>
+        <string>macbook-pro</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/things-bridge-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/things-bridge-agent.err</string>
+</dict>
+</plist>

@@ -24,6 +24,17 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
-  }
+    "noPropertyAccessFromIndexSignature": false,
+
+    // Workspace paths
+    "paths": {
+      "@things-bridge/shared": ["./packages/shared/src/index.ts"],
+      "@things-bridge/shared/*": ["./packages/shared/src/*"]
+    }
+  },
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/linux-api" },
+    { "path": "./packages/mac-agent" }
+  ]
 }

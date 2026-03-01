@@ -1,0 +1,12 @@
+{
+  "name": "@things-bridge/mac-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@things-bridge/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

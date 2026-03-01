@@ -1,0 +1,12 @@
+{
+  "name": "@things-bridge/linux-api",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@things-bridge/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
