@@ -81,6 +81,8 @@ const server = Bun.serve({
           maxAttempts: config.maxAttempts,
         });
 
+        console.log(`[API] Created operation: ${opId} (type: ${type}, idempotency: ${idempotencyKey || 'none'})`);
+
         return Response.json({ opId }, { status: 201 });
       });
     }
@@ -121,6 +123,12 @@ const server = Bun.serve({
 
         const operations = operationsService.claimOperations(agentId, batchSize);
 
+        if (operations.length > 0) {
+          console.log(
+            `[API] Agent ${agentId} claimed ${operations.length} operation(s): ${operations.map((op) => `${op.opId} (${op.type})`).join(', ')}`
+          );
+        }
+
         return Response.json({ operations });
       });
     }
@@ -141,8 +149,10 @@ const server = Bun.serve({
 
         if (success) {
           operationsService.completeOperation(opId, result);
+          console.log(`[API] ✓ Operation completed: ${opId} (result: ${JSON.stringify(result)})`);
         } else {
           operationsService.failOperation(opId, error || 'Unknown error', config.maxAttempts);
+          console.error(`[API] ✗ Operation failed: ${opId} (error: ${error})`);
         }
 
         return Response.json({ success: true });
@@ -165,6 +175,8 @@ const server = Bun.serve({
 
         tasksService.upsertTasks(tasks);
         tasksService.updateSyncState('last_snapshot_at', syncedAt);
+
+        console.log(`[API] Snapshot updated: ${tasks.length} tasks synced at ${syncedAt}`);
 
         return Response.json({ success: true });
       });
