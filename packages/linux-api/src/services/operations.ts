@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { RETRY, OPERATION_STATUS, SCHEMA_VERSION } from '@things-bridge/shared';
-import type { OperationType, OperationPayload, Operation } from '@things-bridge/shared';
+import type { OperationType, OperationPayload, Operation, OperationStatus } from '@things-bridge/shared';
 
 export interface CreateOperationParams {
   type: OperationType;
@@ -15,7 +15,7 @@ interface DbOperation {
   type: OperationType;
   payload_json: string;
   idempotency_key: string | null;
-  status: string;
+  status: OperationStatus;
   locked_at: string | null;
   locked_by: string | null;
   attempt_count: number;
@@ -34,7 +34,7 @@ function mapDbToOperation(dbOp: DbOperation): Operation {
     type: dbOp.type,
     payloadJson: dbOp.payload_json,
     idempotencyKey: dbOp.idempotency_key,
-    status: dbOp.status as any,
+    status: dbOp.status,
     lockedAt: dbOp.locked_at,
     lockedBy: dbOp.locked_by,
     attemptCount: dbOp.attempt_count,
@@ -148,16 +148,17 @@ export class OperationsService {
       .run(OPERATION_STATUS.COMPLETED, now, resultJson, opId);
   }
 
-  failOperation(opId: string, error: string, maxAttempts: number = RETRY.MAX_ATTEMPTS): void {
+  failOperation(opId: string, error: string): void {
     const operation = this.db
-      .query('SELECT attempt_count FROM operations WHERE op_id = ?')
-      .get(opId) as { attempt_count: number } | null;
+      .query('SELECT attempt_count, max_attempts FROM operations WHERE op_id = ?')
+      .get(opId) as { attempt_count: number; max_attempts: number } | null;
 
     if (!operation) {
       throw new Error(`Operation ${opId} not found`);
     }
 
     const attemptCount = operation.attempt_count + 1;
+    const maxAttempts = operation.max_attempts;
     const now = new Date().toISOString();
 
     if (attemptCount >= maxAttempts) {

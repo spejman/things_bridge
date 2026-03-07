@@ -3,14 +3,18 @@ export interface AuthConfig {
   clientToken?: string;
 }
 
-export function authenticateAgent(req: Request, config: AuthConfig): boolean {
+function extractBearerToken(req: Request): string | null {
   const authHeader = req.headers.get('Authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return false;
+    return null;
   }
 
-  const token = authHeader.slice(7);
+  return authHeader.slice(7);
+}
+
+export function authenticateAgent(req: Request, config: AuthConfig): boolean {
+  const token = extractBearerToken(req);
   return token === config.agentToken;
 }
 
@@ -19,12 +23,6 @@ export function authenticateClient(req: Request, config: AuthConfig): boolean {
     return true;
   }
 
-  const authHeader = req.headers.get('Authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return false;
-  }
-
-  const token = authHeader.slice(7);
+  const token = extractBearerToken(req);
   return token === config.clientToken;
 }

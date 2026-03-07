@@ -1,4 +1,3 @@
-import type { Database } from 'bun:sqlite';
 import { initializeDatabase } from './db/database.ts';
 import { OperationsService } from './services/operations.ts';
 import { TasksService } from './services/tasks.ts';
@@ -9,11 +8,12 @@ import {
   ClaimOperationsRequestSchema,
   OpResultRequestSchema,
   TaskSnapshotSchema,
+  TaskStatusSchema,
   INTERVALS,
 } from '@things-bridge/shared';
 
 const config = loadConfig();
-const db = initializeDatabase({ path: config.dbPath });
+const db = await initializeDatabase({ path: config.dbPath });
 const operationsService = new OperationsService(db);
 const tasksService = new TasksService(db);
 
@@ -24,19 +24,15 @@ const lockCleanupInterval = setInterval(() => {
   }
 }, INTERVALS.LOCK_CLEANUP_INTERVAL_MS);
 
-process.on('SIGINT', () => {
+function shutdown() {
   console.log('\nShutting down...');
   clearInterval(lockCleanupInterval);
   db.close();
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-  console.log('\nShutting down...');
-  clearInterval(lockCleanupInterval);
-  db.close();
-  process.exit(0);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 const server = Bun.serve({
   port: config.port,
@@ -49,11 +45,16 @@ const server = Bun.serve({
         return new Response('Unauthorized', { status: 401 });
       }
 
-      const status = url.searchParams.get('status') || undefined;
+      const statusParam = url.searchParams.get('status');
+      const statusParsed = statusParam ? TaskStatusSchema.safeParse(statusParam) : null;
       const projectId = url.searchParams.get('projectId') || undefined;
 
+      if (statusParsed && !statusParsed.success) {
+        return Response.json({ error: 'Invalid status', details: statusParsed.error }, { status: 400 });
+      }
+
       const tasks = tasksService.getTasks({
-        status: status as any,
+        status: statusParsed?.data,
         projectId,
       });
 
@@ -151,7 +152,7 @@ const server = Bun.serve({
           operationsService.completeOperation(opId, result);
           console.log(`[API] ✓ Operation completed: ${opId} (result: ${JSON.stringify(result)})`);
         } else {
-          operationsService.failOperation(opId, error || 'Unknown error', config.maxAttempts);
+          operationsService.failOperation(opId, error || 'Unknown error');
           console.error(`[API] ✗ Operation failed: ${opId} (error: ${error})`);
         }
 

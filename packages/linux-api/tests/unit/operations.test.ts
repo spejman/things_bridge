@@ -8,8 +8,8 @@ describe('OperationsService', () => {
   let db: Database;
   let service: OperationsService;
 
-  beforeEach(() => {
-    db = initializeDatabase({ path: ':memory:' });
+  beforeEach(async () => {
+    db = await initializeDatabase({ path: ':memory:' });
     service = new OperationsService(db);
   });
 
@@ -160,7 +160,7 @@ describe('OperationsService', () => {
 
       for (let i = 0; i < 3; i++) {
         service.claimOperations('agent-1', 10);
-        service.failOperation(opId, `Attempt ${i + 1} failed`, 3);
+        service.failOperation(opId, `Attempt ${i + 1} failed`);
       }
 
       const op = service.getOperation(opId);

@@ -58,8 +58,6 @@ export class OperationProcessor {
   async processBatch(operations: Operation[]): Promise<void> {
     for (const operation of operations) {
       await this.processOperation(operation);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 }
