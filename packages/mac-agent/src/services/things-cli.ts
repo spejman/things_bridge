@@ -4,18 +4,32 @@ import type {
   UpdateTaskPayload,
   CancelTaskPayload,
 } from '@things-bridge/shared';
-import { BRIDGE_ID_PREFIX } from '@things-bridge/shared';
+import { BRIDGE_ID_PREFIX, TASK_STATUS } from '@things-bridge/shared';
+
+const THINGS_LIST_NAMES = new Set(['Today', 'Upcoming', 'Someday']);
 
 export class ThingsCliService {
+  private async runThingsCli(args: string[]): Promise<string> {
+    const proc = Bun.spawn(['things', ...args], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+      const errorText = await new Response(proc.stderr).text();
+      throw new Error(`things CLI failed: ${errorText}`);
+    }
+
+    return await new Response(proc.stdout).text();
+  }
+
   async createTask(payload: CreateTaskPayload): Promise<string> {
     const bridgeId = `${BRIDGE_ID_PREFIX}${crypto.randomUUID()}`;
     const notes = payload.notes ? `${payload.notes}\n\n${bridgeId}` : bridgeId;
 
-    const args: string[] = ['add', payload.title];
-
-    if (notes) {
-      args.push('--notes', notes);
-    }
+    const args: string[] = ['add', payload.title, '--notes', notes];
 
     if (payload.when) {
       args.push('--when', payload.when);
@@ -45,17 +59,7 @@ export class ThingsCliService {
       args.push('--area-id', payload.areaId);
     }
 
-    const proc = Bun.spawn(['things', ...args], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const errorText = await new Response(proc.stderr).text();
-      throw new Error(`things CLI failed: ${errorText}`);
-    }
+    await this.runThingsCli(args);
 
     const thingsId = await this.findTaskByBridgeId(bridgeId);
 
@@ -103,47 +107,15 @@ export class ThingsCliService {
       args.push('--completed', payload.completed ? 'true' : 'false');
     }
 
-    const proc = Bun.spawn(['things', ...args], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const errorText = await new Response(proc.stderr).text();
-      throw new Error(`things CLI update failed: ${errorText}`);
-    }
+    await this.runThingsCli(args);
   }
 
   async cancelTask(payload: CancelTaskPayload): Promise<void> {
-    const proc = Bun.spawn(['things', 'cancel', payload.thingsId], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const errorText = await new Response(proc.stderr).text();
-      throw new Error(`things CLI cancel failed: ${errorText}`);
-    }
+    await this.runThingsCli(['cancel', payload.thingsId]);
   }
 
   async getSnapshot(): Promise<Task[]> {
-    const proc = Bun.spawn(['things', 'show', '--json', '--include-items'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const errorText = await new Response(proc.stderr).text();
-      throw new Error(`things CLI show failed: ${errorText}`);
-    }
-
-    const jsonText = await new Response(proc.stdout).text();
+    const jsonText = await this.runThingsCli(['show', '--json', '--include-items']);
     const thingsTasks = JSON.parse(jsonText);
 
     return thingsTasks.map((thingsTask: any) => this.mapThingsTaskToTask(thingsTask));
@@ -168,18 +140,20 @@ export class ThingsCliService {
       completed: item.status === 'completed',
     }));
 
-    let status: Task['status'] = 'inbox';
+    let status: Task['status'] = TASK_STATUS.INBOX;
     if (thingsTask.status === 'completed') {
-      status = 'completed';
+      status = TASK_STATUS.COMPLETED;
     } else if (thingsTask.status === 'canceled') {
-      status = 'canceled';
+      status = TASK_STATUS.CANCELED;
     } else if (thingsTask.type === 'to-do' && thingsTask.area === 'Today') {
-      status = 'today';
+      status = TASK_STATUS.TODAY;
     } else if (thingsTask.type === 'to-do' && thingsTask.area === 'Upcoming') {
-      status = 'upcoming';
+      status = TASK_STATUS.UPCOMING;
     } else if (thingsTask.type === 'to-do' && thingsTask.area === 'Someday') {
-      status = 'someday';
+      status = TASK_STATUS.SOMEDAY;
     }
+
+    const areaId = THINGS_LIST_NAMES.has(thingsTask.area) ? null : (thingsTask.area || null);
 
     return {
       id: thingsTask.uuid,
@@ -187,7 +161,7 @@ export class ThingsCliService {
       notes: thingsTask.notes || null,
       status,
       projectId: thingsTask.project || null,
-      areaId: thingsTask.area || null,
+      areaId,
       tags,
       checklistItems,
       deadline: thingsTask.deadline || null,

@@ -1,7 +1,3 @@
--- Enable WAL mode and foreign keys
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 -- Tasks table: mirror of Things 3 tasks from snapshots
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,

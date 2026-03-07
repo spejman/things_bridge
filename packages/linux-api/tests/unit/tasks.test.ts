@@ -8,8 +8,8 @@ describe('TasksService', () => {
   let db: Database;
   let service: TasksService;
 
-  beforeEach(() => {
-    db = initializeDatabase({ path: ':memory:' });
+  beforeEach(async () => {
+    db = await initializeDatabase({ path: ':memory:' });
     service = new TasksService(db);
   });
 
