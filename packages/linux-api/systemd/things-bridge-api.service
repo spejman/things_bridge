@@ -1,3 +1,4 @@
+# This is a reference template. The install wizard (bun index.ts) generates this automatically with real values.
 [Unit]
 Description=Things Bridge API Service
 After=network.target
@@ -5,9 +6,8 @@ After=network.target
 [Service]
 Type=simple
 User=things-bridge
-WorkingDirectory=/opt/things-bridge/packages/linux-api
-EnvironmentFile=/etc/things-bridge/api.env
-ExecStart=/usr/local/bin/bun /opt/things-bridge/packages/linux-api/src/index.ts
+WorkingDirectory=/path/to/things_bridge/packages/linux-api
+ExecStart=/usr/local/bin/bun /path/to/things_bridge/packages/linux-api/src/index.ts
 Restart=always
 RestartSec=10
 

@@ -125,6 +125,65 @@ export function buildMacEnv(opts: {
   ].join("\n") + "\n";
 }
 
+export function buildMacPlist(opts: {
+  bunPath: string;
+  workingDirectory: string;
+  entryPoint: string;
+}): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.things-bridge.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${opts.bunPath}</string>
+        <string>${opts.entryPoint}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${opts.workingDirectory}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/things-bridge-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/things-bridge-agent.err</string>
+</dict>
+</plist>
+`;
+}
+
+export function buildLinuxSystemdUnit(opts: {
+  bunPath: string;
+  workingDirectory: string;
+  entryPoint: string;
+  user: string;
+}): string {
+  return `[Unit]
+Description=Things Bridge API Service
+After=network.target
+
+[Service]
+Type=simple
+User=${opts.user}
+WorkingDirectory=${opts.workingDirectory}
+ExecStart=${opts.bunPath} ${opts.entryPoint}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
 function printMenu() {
   process.stdout.write("\nThings Bridge\n\n");
   for (let i = 0; i < commands.length; i++) {
@@ -214,6 +273,47 @@ async function installLinux() {
   process.stdout.write("  Copy this token to your Mac setup:\n\n");
   process.stdout.write(`  AGENT_TOKEN=${agentToken}\n`);
   process.stdout.write("========================================\n\n");
+
+  // Service installation
+  const installService = await prompt("Install as systemd service? (y/n)", "y");
+  if (installService.toLowerCase() !== "y") return;
+
+  const bunPath = Bun.which("bun");
+  if (!bunPath) {
+    process.stdout.write("Could not detect bun path. Skipping service install.\n");
+    return;
+  }
+
+  const serviceUser = await prompt("Service user", process.env.USER || "things-bridge");
+  const workingDirectory = join(rootDir, "packages/linux-api");
+  const entryPoint = join(rootDir, "packages/linux-api/src/index.ts");
+
+  const unit = buildLinuxSystemdUnit({ bunPath, workingDirectory, entryPoint, user: serviceUser });
+  const serviceName = "things-bridge-api.service";
+  const servicePath = `/etc/systemd/system/${serviceName}`;
+  const tmpPath = `/tmp/${serviceName}`;
+
+  await Bun.write(tmpPath, unit);
+  process.stdout.write(`\nInstalling systemd service...\n`);
+
+  try {
+    await Bun.$`sudo mv ${tmpPath} ${servicePath}`.quiet();
+    await Bun.$`sudo systemctl daemon-reload`.quiet();
+    await Bun.$`sudo systemctl enable ${serviceName}`.quiet();
+    await Bun.$`sudo systemctl start ${serviceName}`.quiet();
+
+    const result = await Bun.$`systemctl is-active ${serviceName}`.quiet().text();
+    if (result.trim() === "active") {
+      process.stdout.write(`Service installed and running!\n`);
+    } else {
+      process.stdout.write(`Service installed but status: ${result.trim()}\n`);
+    }
+    process.stdout.write(`Check logs with: journalctl -u ${serviceName} -f\n\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Service install failed: ${message}\n`);
+    process.stdout.write(`You can manually copy ${tmpPath} to ${servicePath}\n\n`);
+  }
 }
 
 async function installMac() {
@@ -271,6 +371,50 @@ async function installMac() {
     const message = err instanceof Error ? err.message : String(err);
     process.stdout.write(`Connection failed: ${message}\n`);
     process.stdout.write("Check that the API server is running and reachable.\n\n");
+  }
+
+  // Service installation
+  const installService = await prompt("Install as launchd service? (y/n)", "y");
+  if (installService.toLowerCase() !== "y") return;
+
+  const bunPath = Bun.which("bun");
+  if (!bunPath) {
+    process.stdout.write("Could not detect bun path. Skipping service install.\n");
+    return;
+  }
+
+  const workingDirectory = join(rootDir, "packages/mac-agent");
+  const entryPoint = join(rootDir, "packages/mac-agent/src/index.ts");
+  const plist = buildMacPlist({ bunPath, workingDirectory, entryPoint });
+
+  const plistName = "com.things-bridge.agent.plist";
+  const homeDir = process.env.HOME || "~";
+  const plistPath = join(homeDir, "Library/LaunchAgents", plistName);
+
+  // Unload existing service if present
+  try {
+    await Bun.$`launchctl unload ${plistPath} 2>/dev/null`.nothrow().quiet();
+  } catch {
+    // Ignore — service may not be loaded
+  }
+
+  await Bun.write(plistPath, plist);
+  process.stdout.write(`\nWritten: ${plistPath}\n`);
+
+  try {
+    await Bun.$`launchctl load ${plistPath}`.quiet();
+    const result = await Bun.$`launchctl list com.things-bridge.agent`.nothrow().quiet().text();
+    if (result.includes("com.things-bridge.agent")) {
+      process.stdout.write("Service installed and running!\n");
+    } else {
+      process.stdout.write("Service loaded. Verify with: launchctl list com.things-bridge.agent\n");
+    }
+    process.stdout.write("Logs: /tmp/things-bridge-agent.log\n");
+    process.stdout.write("Errors: /tmp/things-bridge-agent.err\n\n");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Service load failed: ${message}\n`);
+    process.stdout.write(`Plist written to ${plistPath} — you can load it manually.\n\n`);
   }
 }
 

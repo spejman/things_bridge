@@ -4,6 +4,8 @@ import {
   generateToken,
   buildLinuxEnv,
   buildMacEnv,
+  buildMacPlist,
+  buildLinuxSystemdUnit,
   endpoints,
   parseEnvFile,
   resolveEndpointPath,
@@ -242,4 +244,99 @@ test("formatResponse handles string body", () => {
 test("formatResponse handles empty object", () => {
   const result = formatResponse(204, {});
   expect(result).toBe("HTTP 204\n{}");
+});
+
+// --- buildMacPlist tests ---
+
+const plistOpts = {
+  bunPath: "/opt/homebrew/bin/bun",
+  workingDirectory: "/Users/sergio/things_bridge/packages/mac-agent",
+  entryPoint: "/Users/sergio/things_bridge/packages/mac-agent/src/index.ts",
+};
+
+test("buildMacPlist contains XML header and Label", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain('<?xml version="1.0"');
+  expect(plist).toContain("<key>Label</key>");
+  expect(plist).toContain("<string>com.things-bridge.agent</string>");
+});
+
+test("buildMacPlist contains ProgramArguments with correct paths", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain(`<string>${plistOpts.bunPath}</string>`);
+  expect(plist).toContain(`<string>${plistOpts.entryPoint}</string>`);
+});
+
+test("buildMacPlist contains WorkingDirectory", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain("<key>WorkingDirectory</key>");
+  expect(plist).toContain(`<string>${plistOpts.workingDirectory}</string>`);
+});
+
+test("buildMacPlist does not contain placeholder values", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).not.toContain("USERNAME");
+  expect(plist).not.toContain("your-token");
+  expect(plist).not.toContain("your-linux-server");
+});
+
+test("buildMacPlist contains PATH environment variable", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain("<key>PATH</key>");
+  expect(plist).toContain("/opt/homebrew/bin");
+  expect(plist).toContain("/usr/local/bin");
+});
+
+test("buildMacPlist sets RunAtLoad and KeepAlive", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain("<key>RunAtLoad</key>");
+  expect(plist).toContain("<key>KeepAlive</key>");
+});
+
+test("buildMacPlist sets log paths", () => {
+  const plist = buildMacPlist(plistOpts);
+  expect(plist).toContain("/tmp/things-bridge-agent.log");
+  expect(plist).toContain("/tmp/things-bridge-agent.err");
+});
+
+// --- buildLinuxSystemdUnit tests ---
+
+const unitOpts = {
+  bunPath: "/usr/local/bin/bun",
+  workingDirectory: "/opt/things-bridge/packages/linux-api",
+  entryPoint: "/opt/things-bridge/packages/linux-api/src/index.ts",
+  user: "sergio",
+};
+
+test("buildLinuxSystemdUnit contains all sections", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).toContain("[Unit]");
+  expect(unit).toContain("[Service]");
+  expect(unit).toContain("[Install]");
+});
+
+test("buildLinuxSystemdUnit has correct ExecStart", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).toContain(`ExecStart=${unitOpts.bunPath} ${unitOpts.entryPoint}`);
+});
+
+test("buildLinuxSystemdUnit has correct User", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).toContain(`User=${unitOpts.user}`);
+});
+
+test("buildLinuxSystemdUnit has correct WorkingDirectory", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).toContain(`WorkingDirectory=${unitOpts.workingDirectory}`);
+});
+
+test("buildLinuxSystemdUnit does not contain EnvironmentFile", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).not.toContain("EnvironmentFile");
+});
+
+test("buildLinuxSystemdUnit sets Restart and RestartSec", () => {
+  const unit = buildLinuxSystemdUnit(unitOpts);
+  expect(unit).toContain("Restart=always");
+  expect(unit).toContain("RestartSec=10");
 });
