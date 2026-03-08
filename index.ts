@@ -1,5 +1,90 @@
 import { join } from "node:path";
 
+// --- API Explorer types and constants ---
+
+export interface ExplorerConfig {
+  apiUrl: string;
+  agentToken: string;
+  clientToken: string;
+  agentId: string;
+}
+
+export const endpoints = [
+  { label: "GET  /tasks", method: "GET", path: "/tasks", auth: "client" },
+  { label: "POST /ops", method: "POST", path: "/ops", auth: "client" },
+  { label: "GET  /ops/:opId", method: "GET", path: "/ops/:opId", auth: "client" },
+  { label: "POST /agent/claim", method: "POST", path: "/agent/claim", auth: "agent" },
+  { label: "POST /agent/op-result", method: "POST", path: "/agent/op-result", auth: "agent" },
+  { label: "POST /agent/snapshot", method: "POST", path: "/agent/snapshot", auth: "agent" },
+  { label: "POST /agent/heartbeat", method: "POST", path: "/agent/heartbeat", auth: "agent" },
+] as const;
+
+export function parseEnvFile(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    const value = trimmed.slice(eqIndex + 1).trim();
+    result[key] = value;
+  }
+  return result;
+}
+
+export function resolveEndpointPath(path: string, replacements: Record<string, string>): string {
+  let result = path;
+  for (const [param, value] of Object.entries(replacements)) {
+    result = result.replace(`:${param}`, encodeURIComponent(value));
+  }
+  return result;
+}
+
+export function buildQueryString(params: Record<string, string>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== "");
+  if (entries.length === 0) return "";
+  const parts = entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  return "?" + parts.join("&");
+}
+
+export function buildFetchOptions(
+  endpoint: (typeof endpoints)[number],
+  config: ExplorerConfig,
+  params: { pathParams?: Record<string, string>; queryParams?: Record<string, string>; body?: unknown },
+): { url: string; init: RequestInit } {
+  const path = params.pathParams
+    ? resolveEndpointPath(endpoint.path, params.pathParams)
+    : endpoint.path;
+  const query = params.queryParams ? buildQueryString(params.queryParams) : "";
+  const url = config.apiUrl + path + query;
+
+  const token = endpoint.auth === "agent" ? config.agentToken : config.clientToken;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  const init: RequestInit = {
+    method: endpoint.method,
+    headers,
+  };
+
+  if (params.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(params.body);
+  }
+
+  return { url, init };
+}
+
+export function formatResponse(status: number, body: unknown): string {
+  const statusLine = `HTTP ${status}`;
+  const bodyStr = typeof body === "string" ? body : JSON.stringify(body, null, 2);
+  return `${statusLine}\n${bodyStr}`;
+}
+
+// --- CLI menu commands ---
+
 export const commands = [
   { label: "Start API server", cmd: ["bun", "packages/linux-api/src/index.ts"] },
   { label: "Start mac agent", cmd: ["bun", "packages/mac-agent/src/index.ts"] },
@@ -45,7 +130,8 @@ function printMenu() {
   for (let i = 0; i < commands.length; i++) {
     process.stdout.write(`  ${i + 1}) ${commands[i].label}\n`);
   }
-  process.stdout.write(`  ${commands.length + 1}) Install\n`);
+  process.stdout.write(`  ${commands.length + 1}) Explore API\n`);
+  process.stdout.write(`  ${commands.length + 2}) Install\n`);
   process.stdout.write("  0) Exit\n\n");
   process.stdout.write("Pick a command: ");
 }
@@ -188,6 +274,229 @@ async function installMac() {
   }
 }
 
+// --- API Explorer flow ---
+
+async function loadExplorerConfig(): Promise<ExplorerConfig> {
+  const rootDir = join(import.meta.dir);
+  const macEnvPath = join(rootDir, "packages/mac-agent/.env");
+  const linuxEnvPath = join(rootDir, "packages/linux-api/.env");
+
+  let macEnv: Record<string, string> = {};
+  let linuxEnv: Record<string, string> = {};
+
+  const macFile = Bun.file(macEnvPath);
+  if (await macFile.exists()) {
+    macEnv = parseEnvFile(await macFile.text());
+  }
+  const linuxFile = Bun.file(linuxEnvPath);
+  if (await linuxFile.exists()) {
+    linuxEnv = parseEnvFile(await linuxFile.text());
+  }
+
+  const hasEnvFiles = Object.keys(macEnv).length > 0 || Object.keys(linuxEnv).length > 0;
+
+  // Resolve defaults from .env files
+  const defaultApiUrl = macEnv.API_URL
+    || (linuxEnv.PORT ? `http://localhost:${linuxEnv.PORT}` : "http://localhost:3000");
+  const defaultAgentToken = macEnv.AGENT_TOKEN || linuxEnv.AGENT_TOKEN || "";
+  const defaultClientToken = linuxEnv.CLIENT_TOKEN || "";
+  const defaultAgentId = macEnv.AGENT_ID || "default-agent";
+
+  if (hasEnvFiles) {
+    process.stdout.write("\nLoaded from .env files:\n");
+    process.stdout.write(`  API URL:      ${defaultApiUrl}\n`);
+    process.stdout.write(`  Agent token:  ${defaultAgentToken ? defaultAgentToken.slice(0, 8) + "..." : "(not set)"}\n`);
+    process.stdout.write(`  Client token: ${defaultClientToken ? defaultClientToken.slice(0, 8) + "..." : "(not set)"}\n`);
+    process.stdout.write(`  Agent ID:     ${defaultAgentId}\n\n`);
+
+    const action = await prompt("Enter to use these, or 'edit' to modify", "");
+    if (action.toLowerCase() !== "edit") {
+      return {
+        apiUrl: defaultApiUrl,
+        agentToken: defaultAgentToken,
+        clientToken: defaultClientToken,
+        agentId: defaultAgentId,
+      };
+    }
+  } else {
+    process.stdout.write("\nNo .env files found. Please enter connection details:\n\n");
+  }
+
+  const apiUrl = await prompt("API URL", defaultApiUrl);
+  const agentToken = await prompt("Agent token", defaultAgentToken);
+  const clientToken = await prompt("Client token", defaultClientToken);
+  const agentId = await prompt("Agent ID", defaultAgentId);
+
+  return { apiUrl, agentToken, clientToken, agentId };
+}
+
+function printExplorerMenu(config: ExplorerConfig) {
+  const agentStatus = config.agentToken ? "✓" : "✗";
+  const clientStatus = config.clientToken ? "✓" : "✗";
+
+  process.stdout.write("\nAPI Explorer\n\n");
+  process.stdout.write(`  Connection: ${config.apiUrl}\n`);
+  process.stdout.write(`  Tokens: agent ${agentStatus}  client ${clientStatus}\n\n`);
+  process.stdout.write("  --- Client ---\n");
+  process.stdout.write("  1) GET  /tasks\n");
+  process.stdout.write("  2) POST /ops\n");
+  process.stdout.write("  3) GET  /ops/:opId\n\n");
+  process.stdout.write("  --- Agent ---\n");
+  process.stdout.write("  4) POST /agent/claim\n");
+  process.stdout.write("  5) POST /agent/op-result\n");
+  process.stdout.write("  6) POST /agent/snapshot\n");
+  process.stdout.write("  7) POST /agent/heartbeat\n\n");
+  process.stdout.write("  0) Back\n\n");
+  process.stdout.write("Pick an endpoint: ");
+}
+
+async function promptGetTasks(config: ExplorerConfig) {
+  const status = await prompt("status? (inbox/today/upcoming/someday/completed/canceled/trash)", "");
+  const projectId = await prompt("projectId?", "");
+  const { url, init } = buildFetchOptions(endpoints[0], config, {
+    queryParams: { status, projectId },
+  });
+  return { url, init };
+}
+
+async function promptPostOps(config: ExplorerConfig) {
+  const type = await prompt("type (create_task/update_task/cancel_task)");
+  let params: Record<string, unknown> = { type };
+
+  if (type === "create_task") {
+    const title = await prompt("title (required)");
+    const notes = await prompt("notes?", "");
+    const when = await prompt("when?", "");
+    params = { type, attributes: { title, ...(notes && { notes }), ...(when && { when }) } };
+  } else if (type === "update_task") {
+    const thingsId = await prompt("thingsId (required)");
+    const title = await prompt("title?", "");
+    const completed = await prompt("completed? (true/false)", "");
+    params = {
+      type,
+      thingsId,
+      attributes: {
+        ...(title && { title }),
+        ...(completed && { completed: completed === "true" }),
+      },
+    };
+  } else if (type === "cancel_task") {
+    const thingsId = await prompt("thingsId (required)");
+    params = { type, thingsId };
+  }
+
+  const { url, init } = buildFetchOptions(endpoints[1], config, { body: params });
+  return { url, init };
+}
+
+async function promptGetOp(config: ExplorerConfig) {
+  const opId = await prompt("opId (UUID)");
+  const { url, init } = buildFetchOptions(endpoints[2], config, {
+    pathParams: { opId },
+  });
+  return { url, init };
+}
+
+async function promptAgentClaim(config: ExplorerConfig) {
+  const agentId = await prompt("agentId", config.agentId);
+  const batchSize = await prompt("batchSize", "10");
+  const { url, init } = buildFetchOptions(endpoints[3], config, {
+    body: { agentId, batchSize: parseInt(batchSize, 10) },
+  });
+  return { url, init };
+}
+
+async function promptAgentOpResult(config: ExplorerConfig) {
+  const opId = await prompt("opId (UUID)");
+  const success = await prompt("success? (y/n)", "y");
+  const isSuccess = success.toLowerCase() === "y";
+
+  let body: Record<string, unknown>;
+  if (isSuccess) {
+    const resultJson = await prompt("result JSON", "{}");
+    try {
+      body = { opId, success: true, result: JSON.parse(resultJson) };
+    } catch {
+      process.stdout.write("Invalid JSON, sending as string.\n");
+      body = { opId, success: true, result: resultJson };
+    }
+  } else {
+    const error = await prompt("error message");
+    body = { opId, success: false, error };
+  }
+
+  const { url, init } = buildFetchOptions(endpoints[4], config, { body });
+  return { url, init };
+}
+
+async function promptAgentSnapshot(config: ExplorerConfig) {
+  process.stdout.write("Paste raw JSON body (task array), then press Enter:\n");
+  const raw = await readLine();
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    process.stdout.write("Invalid JSON.\n");
+    return null;
+  }
+  const { url, init } = buildFetchOptions(endpoints[5], config, { body });
+  return { url, init };
+}
+
+async function promptAgentHeartbeat(config: ExplorerConfig) {
+  const { url, init } = buildFetchOptions(endpoints[6], config, { body: {} });
+  return { url, init };
+}
+
+async function executeRequest(url: string, init: RequestInit) {
+  process.stdout.write(`\n→ ${init.method} ${url}\n`);
+  try {
+    const res = await fetch(url, init);
+    let body: unknown;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      body = await res.json();
+    } else {
+      body = await res.text();
+    }
+    process.stdout.write("\n" + formatResponse(res.status, body) + "\n");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`\nRequest failed: ${message}\n`);
+  }
+}
+
+const endpointPrompts = [
+  promptGetTasks,
+  promptPostOps,
+  promptGetOp,
+  promptAgentClaim,
+  promptAgentOpResult,
+  promptAgentSnapshot,
+  promptAgentHeartbeat,
+];
+
+async function exploreApiFlow() {
+  const config = await loadExplorerConfig();
+
+  while (true) {
+    printExplorerMenu(config);
+    const input = await readLine();
+    const choice = parseInt(input, 10);
+
+    if (choice === 0 || isNaN(choice)) return;
+    if (choice < 1 || choice > 7) {
+      process.stdout.write(`Invalid choice: ${input}\n`);
+      continue;
+    }
+
+    const result = await endpointPrompts[choice - 1](config);
+    if (result) {
+      await executeRequest(result.url, result.init);
+    }
+  }
+}
+
 async function installFlow() {
   while (true) {
     printInstallMenu();
@@ -220,11 +529,16 @@ async function main() {
     }
 
     if (choice === commands.length + 1) {
+      await exploreApiFlow();
+      continue;
+    }
+
+    if (choice === commands.length + 2) {
       await installFlow();
       continue;
     }
 
-    if (choice < 1 || choice > commands.length + 1) {
+    if (choice < 1 || choice > commands.length + 2) {
       process.stdout.write(`Invalid choice: ${input}\n`);
       continue;
     }
