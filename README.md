@@ -33,6 +33,7 @@ A reliable bridge system that enables Linux systems to interact with Things 3 (m
 - ✅ **Snapshot Sync**: Full task synchronization from Things 3 to API
 - ✅ **Dead Letter Queue**: Failed operations tracked for manual intervention
 - ✅ **Type Safe**: Full TypeScript implementation with Zod validation
+- ✅ **Full Backup**: Export all Things 3 data (areas, projects, tags, tasks) to JSON
 
 ## Quick Start
 
@@ -128,6 +129,16 @@ curl http://your-server:3000/tasks?status=today \
 ```bash
 curl http://your-server:3000/ops/OPERATION_ID \
   -H "Authorization: Bearer YOUR_CLIENT_TOKEN"
+```
+
+### Backup Things 3
+
+```bash
+# Full backup to default location (~/.things-bridge/backups/)
+bun run backup
+
+# Custom backup directory
+BACKUP_DIR=/custom/path bun run backup
 ```
 
 ## API Reference
