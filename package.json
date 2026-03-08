@@ -8,6 +8,7 @@
     "dev:agent": "bun --hot packages/mac-agent/src/index.ts",
     "start:api": "bun packages/linux-api/src/index.ts",
     "start:agent": "bun packages/mac-agent/src/index.ts",
+    "backup": "bun packages/mac-agent/src/backup.ts",
     "test": "bun test"
   },
   "devDependencies": {
