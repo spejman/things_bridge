@@ -114,6 +114,26 @@ export class ThingsCliService {
     await this.runThingsCli(['cancel', payload.thingsId]);
   }
 
+  async getAreas(): Promise<unknown[]> {
+    const jsonText = await this.runThingsCli(['areas', '--json']);
+    return JSON.parse(jsonText);
+  }
+
+  async getProjects(): Promise<unknown[]> {
+    const jsonText = await this.runThingsCli(['projects', '--json', '--all', '--recursive']);
+    return JSON.parse(jsonText);
+  }
+
+  async getTags(): Promise<unknown[]> {
+    const jsonText = await this.runThingsCli(['tags', '--json']);
+    return JSON.parse(jsonText);
+  }
+
+  async getAllTasks(): Promise<unknown[]> {
+    const jsonText = await this.runThingsCli(['tasks', '--json', '--all', '--recursive', '--limit=0']);
+    return JSON.parse(jsonText);
+  }
+
   async getSnapshot(): Promise<Task[]> {
     const jsonText = await this.runThingsCli(['show', '--json', '--include-items']);
     const thingsTasks = JSON.parse(jsonText);
