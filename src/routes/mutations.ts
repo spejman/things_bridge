@@ -15,6 +15,8 @@ function authTokenErrorResponse(err: Error): Response {
 const UpdateBodySchema = z.object({
   title: z.string().min(1).optional(),
   notes: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+  areaId: z.string().nullable().optional(),
   when: z.enum(['today', 'evening', 'tomorrow', 'this-weekend', 'next-week', 'someday']).nullable().optional(),
   whenDate: z.string().nullable().optional(),
   deadline: z.string().nullable().optional(),
@@ -73,6 +75,8 @@ export async function handleUpdateTask(
     await cli.updateTask(id, {
       title: parsed.data.title,
       notes: parsed.data.notes,
+      projectId: parsed.data.projectId ?? undefined,
+      areaId: parsed.data.areaId ?? undefined,
       when: parsed.data.when ?? undefined,
       whenDate: parsed.data.whenDate ?? undefined,
       deadline: parsed.data.deadline ?? undefined,

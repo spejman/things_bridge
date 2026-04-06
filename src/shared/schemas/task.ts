@@ -39,8 +39,8 @@ export const TaskSchema = z.object({
 export const CreateTaskPayloadSchema = z.object({
   title: z.string().min(1),
   notes: z.string().optional(),
-  projectId: z.string().uuid().optional(),
-  areaId: z.string().uuid().optional(),
+  projectId: z.string().optional(),
+  areaId: z.string().optional(),
   tags: z.array(z.string()).optional(),
   checklistItems: z.array(ChecklistItemSchema).optional(),
   deadline: z.string().datetime().optional(),
@@ -49,11 +49,11 @@ export const CreateTaskPayloadSchema = z.object({
 });
 
 export const UpdateTaskPayloadSchema = z.object({
-  thingsId: z.string().uuid(),
+  thingsId: z.string(),
   title: z.string().min(1).optional(),
   notes: z.string().optional(),
-  projectId: z.string().uuid().nullable().optional(),
-  areaId: z.string().uuid().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  areaId: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   checklistItems: z.array(ChecklistItemSchema).optional(),
   deadline: z.string().datetime().nullable().optional(),

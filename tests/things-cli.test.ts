@@ -112,6 +112,31 @@ describe('ThingsCliService', () => {
     expect(calledArgs).toContain('Updated');
   });
 
+  test('updateTask passes --list-id for projectId', async () => {
+    let calledArgs: string[] = [];
+    const runner = async (args: string[]) => { calledArgs = args; return ''; };
+    const cli = new ThingsCliService(runner);
+    await cli.updateTask('task-uuid', { projectId: 'proj-uuid' });
+    expect(calledArgs).toContain('--list-id=proj-uuid');
+  });
+
+  test('updateTask passes --list-id for areaId', async () => {
+    let calledArgs: string[] = [];
+    const runner = async (args: string[]) => { calledArgs = args; return ''; };
+    const cli = new ThingsCliService(runner);
+    await cli.updateTask('task-uuid', { areaId: 'area-uuid' });
+    expect(calledArgs).toContain('--list-id=area-uuid');
+  });
+
+  test('updateTask prefers projectId over areaId for --list-id', async () => {
+    let calledArgs: string[] = [];
+    const runner = async (args: string[]) => { calledArgs = args; return ''; };
+    const cli = new ThingsCliService(runner);
+    await cli.updateTask('task-uuid', { projectId: 'proj-uuid', areaId: 'area-uuid' });
+    expect(calledArgs).toContain('--list-id=proj-uuid');
+    expect(calledArgs).not.toContain('--list-id=area-uuid');
+  });
+
   test('completeTask calls update --id --completed', async () => {
     let calledArgs: string[] = [];
     const runner = async (args: string[]) => { calledArgs = args; return ''; };

@@ -131,6 +131,8 @@ export class ThingsCliService {
     const args = ['update', `--id=${id}`];
     if (payload.title !== undefined) args.push(payload.title);
     if (payload.notes !== undefined) args.push(`--notes=${payload.notes}`);
+    if (payload.projectId !== undefined) args.push(`--list-id=${payload.projectId}`);
+    else if (payload.areaId !== undefined) args.push(`--list-id=${payload.areaId}`);
     if (payload.whenDate !== undefined) args.push(`--when=${payload.whenDate ?? ''}`);
     else if (payload.when !== undefined) args.push(`--when=${payload.when ?? ''}`);
     if (payload.deadline !== undefined) args.push(`--deadline=${payload.deadline ?? ''}`);
