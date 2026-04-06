@@ -39,6 +39,18 @@ bun dev    # hot reload
 | `THINGS_PROVIDER_TOKEN` | (required) | Bearer token for API auth |
 | `THINGS_PROVIDER_PORT` | `2714` | Server port |
 | `THINGS_PROVIDER_DB_PATH` | `~/.things-provider/change-log.db` | SQLite path for change log |
+| `THINGS_AUTH_TOKEN` | (optional) | Things URL auth token — required for write operations |
+
+### Enabling write operations
+
+Create, update, complete, cancel, and delete endpoints require a Things URL auth token. Without it, the server starts in read-only mode and write requests return `503`.
+
+1. Open **Things 3 > Settings > General > Things URLs** and enable it
+2. Copy the auth token shown there
+3. Provide it via one of:
+   - `THINGS_AUTH_TOKEN` in `.env` or environment
+   - `--things-auth-token <token>` CLI flag
+   - The interactive prompt on first run
 
 ## API
 

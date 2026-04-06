@@ -51,6 +51,7 @@ async function commandExists(cmd: string): Promise<boolean> {
 export interface CliArgs {
   port?: number;
   token?: string;
+  thingsAuthToken?: string;
   foreground?: boolean;
   service?: boolean;
   status?: boolean;
@@ -79,6 +80,9 @@ export function parseArgs(argv?: string[]): CliArgs {
       result.uninstall = true;
     } else if (args[i] === '--logs') {
       result.logs = true;
+    } else if (args[i] === '--things-auth-token' && args[i + 1]) {
+      result.thingsAuthToken = args[i + 1];
+      i++;
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
   things3-bridge — REST API for Things 3
@@ -90,13 +94,17 @@ export function parseArgs(argv?: string[]): CliArgs {
   continuously in the background.
 
   Options:
-    --port <number>    Server port (default: 2714)
-    --token <string>   Bearer token for API auth (auto-generated if omitted)
-    --foreground       Run server directly without service management
-    --status           Show service status
-    --logs             Tail service logs in real time
-    --uninstall        Remove the LaunchAgent service
-    -h, --help         Show this help message
+    --port <number>              Server port (default: 2714)
+    --token <string>             Bearer token for API auth (auto-generated if omitted)
+    --things-auth-token <token>  Things URL auth token (required for write operations)
+    --foreground                 Run server directly without service management
+    --status                     Show service status
+    --logs                       Tail service logs in real time
+    --uninstall                  Remove the LaunchAgent service
+    -h, --help                   Show this help message
+
+  The Things auth token enables write operations (create, update, delete).
+  Find it in Things 3 > Settings > General > Things URLs.
 `);
       process.exit(0);
     }
@@ -132,6 +140,33 @@ async function loadOrCreateToken(): Promise<string> {
 
   success(`Generated new token and saved to ${ENV_FILE}`);
   return token;
+}
+
+async function loadOrPromptThingsAuthToken(): Promise<string | null> {
+  // Check saved env file
+  if (existsSync(ENV_FILE)) {
+    const content = await readFile(ENV_FILE, 'utf-8');
+    const match = content.match(/^THINGS_AUTH_TOKEN=(.+)$/m);
+    if (match?.[1]) {
+      log('Using saved Things auth token from ~/.things-provider/.env');
+      return match[1];
+    }
+  }
+
+  // Prompt (optional — user can skip)
+  log('Things auth token enables write operations (create, update, delete).');
+  log('Find it in Things 3 > Settings > General > Things URLs.');
+  const answer = await prompt('  Things auth token (press Enter to skip): ');
+  if (!answer) return null;
+
+  // Save for next time
+  await mkdir(CONFIG_DIR, { recursive: true });
+  const envContent = existsSync(ENV_FILE) ? await readFile(ENV_FILE, 'utf-8') : '';
+  const lines = envContent.split('\n').filter((l) => !l.startsWith('THINGS_AUTH_TOKEN='));
+  lines.push(`THINGS_AUTH_TOKEN=${answer}`);
+  await writeFile(ENV_FILE, lines.filter(Boolean).join('\n') + '\n');
+  success('Saved Things auth token to ~/.things-provider/.env');
+  return answer;
 }
 
 async function savePortToEnvFile(port: number): Promise<void> {
@@ -334,6 +369,18 @@ async function main() {
   // Resolve token and port
   const token = args.token ?? process.env['THINGS_PROVIDER_TOKEN'] ?? (await loadOrCreateToken());
   const port = args.port ?? parseInt(process.env['THINGS_PROVIDER_PORT'] ?? '2714', 10);
+
+  // Resolve Things auth token: CLI arg > env var > saved file > prompt
+  const thingsAuthToken = args.thingsAuthToken
+    ?? process.env['THINGS_AUTH_TOKEN']
+    ?? (args.service ? null : await loadOrPromptThingsAuthToken());
+
+  if (thingsAuthToken) {
+    process.env['THINGS_AUTH_TOKEN'] = thingsAuthToken;
+  } else {
+    log('\x1b[33m⚠ No Things auth token — write operations will fail.\x1b[0m');
+    log('  Run again with --things-auth-token or set THINGS_AUTH_TOKEN in .env');
+  }
 
   // Save port to env file so the service picks it up
   await savePortToEnvFile(port);

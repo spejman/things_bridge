@@ -4,6 +4,14 @@ import type { ThingsCliService } from '../things-cli.ts';
 import type { ChangeLog } from '../change-log.ts';
 import { requireAuth } from '../auth.ts';
 
+function isAuthTokenError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('auth token');
+}
+
+function authTokenErrorResponse(err: Error): Response {
+  return Response.json({ error: err.message }, { status: 503 });
+}
+
 const UpdateBodySchema = z.object({
   title: z.string().min(1).optional(),
   notes: z.string().optional(),
@@ -28,7 +36,13 @@ export async function handleCreateTask(
     return Response.json({ error: 'Invalid request', details: parsed.error }, { status: 400 });
   }
 
-  const newId = await cli.createTask(parsed.data);
+  let newId: string;
+  try {
+    newId = await cli.createTask(parsed.data);
+  } catch (err) {
+    if (isAuthTokenError(err)) return authTokenErrorResponse(err as Error);
+    throw err;
+  }
   const after = await cli.getTaskById(newId);
 
   const entry = changeLog.record({ operation: 'create', taskId: newId, before: null, after });
@@ -55,14 +69,19 @@ export async function handleUpdateTask(
     return Response.json({ error: 'Invalid request', details: parsed.error }, { status: 400 });
   }
 
-  await cli.updateTask(id, {
-    title: parsed.data.title,
-    notes: parsed.data.notes,
-    when: parsed.data.when ?? undefined,
-    whenDate: parsed.data.whenDate ?? undefined,
-    deadline: parsed.data.deadline ?? undefined,
-    tags: parsed.data.tags,
-  });
+  try {
+    await cli.updateTask(id, {
+      title: parsed.data.title,
+      notes: parsed.data.notes,
+      when: parsed.data.when ?? undefined,
+      whenDate: parsed.data.whenDate ?? undefined,
+      deadline: parsed.data.deadline ?? undefined,
+      tags: parsed.data.tags,
+    });
+  } catch (err) {
+    if (isAuthTokenError(err)) return authTokenErrorResponse(err as Error);
+    throw err;
+  }
 
   const after = await cli.getTaskById(id);
   const entry = changeLog.record({ operation: 'update', taskId: id, before, after });
@@ -83,7 +102,12 @@ export async function handleCompleteTask(
   const before = await cli.getTaskById(id);
   if (!before) return new Response('Not found', { status: 404 });
 
-  await cli.completeTask(id);
+  try {
+    await cli.completeTask(id);
+  } catch (err) {
+    if (isAuthTokenError(err)) return authTokenErrorResponse(err as Error);
+    throw err;
+  }
   const after = await cli.getTaskById(id);
   const entry = changeLog.record({ operation: 'complete', taskId: id, before, after });
 
@@ -103,7 +127,12 @@ export async function handleCancelTask(
   const before = await cli.getTaskById(id);
   if (!before) return new Response('Not found', { status: 404 });
 
-  await cli.cancelTask(id);
+  try {
+    await cli.cancelTask(id);
+  } catch (err) {
+    if (isAuthTokenError(err)) return authTokenErrorResponse(err as Error);
+    throw err;
+  }
   const after = await cli.getTaskById(id);
   const entry = changeLog.record({ operation: 'cancel', taskId: id, before, after });
 
@@ -123,7 +152,12 @@ export async function handleDeleteTask(
   const before = await cli.getTaskById(id);
   if (!before) return new Response('Not found', { status: 404 });
 
-  await cli.deleteTask(id);
+  try {
+    await cli.deleteTask(id);
+  } catch (err) {
+    if (isAuthTokenError(err)) return authTokenErrorResponse(err as Error);
+    throw err;
+  }
   const entry = changeLog.record({ operation: 'delete', taskId: id, before, after: null });
 
   return Response.json({ entryId: entry.id });
