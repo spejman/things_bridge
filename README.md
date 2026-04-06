@@ -8,7 +8,7 @@ A REST API that wraps the [Things 3](https://culturedcode.com/things/) macOS tas
 bunx things3-bridge
 ```
 
-The CLI checks for dependencies (offering to install `things-cli` via Homebrew if missing), generates an API token on first run, and installs a LaunchAgent that starts on login and runs continuously at `http://localhost:2714`.
+The CLI checks for dependencies (offering to install `things3-cli` via Homebrew if missing), generates an API token on first run, and installs a LaunchAgent that starts on login and runs continuously at `http://localhost:2714`.
 
 ```bash
 bunx things3-bridge --port 8080        # custom port
@@ -23,7 +23,7 @@ bunx things3-bridge --uninstall        # remove the service
 
 - macOS with [Things 3](https://culturedcode.com/things/) installed
 - [Bun](https://bun.sh): `curl -fsSL https://bun.sh/install | bash`
-- [things-cli](https://github.com/thingsapi/things-cli) (auto-installed if missing)
+- [things3-cli](https://github.com/ossianhempel/things3-cli) (auto-installed if missing)
 
 ### Development
 

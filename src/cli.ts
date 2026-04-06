@@ -200,36 +200,36 @@ async function checkThings3(): Promise<boolean> {
 async function checkThingsCli(): Promise<boolean> {
   if (await commandExists('things')) return true;
 
-  log('things-cli is not installed (required to communicate with Things 3).');
+  log('things3-cli is not installed (required to communicate with Things 3).');
 
   if (await commandExists('brew')) {
     const answer = await prompt('  Install via Homebrew? (Y/n) ');
     if (answer === '' || answer === 'y' || answer === 'yes') {
-      log('Installing things-cli...');
-      const proc = Bun.spawn(['brew', 'install', 'things-cli'], {
+      log('Installing things3-cli...');
+      const proc = Bun.spawn(['brew', 'install', 'ossianhempel/tap/things3-cli'], {
         stdout: 'inherit',
         stderr: 'inherit',
       });
       await proc.exited;
       if (proc.exitCode !== 0) {
-        error('Failed to install things-cli. Please install manually:');
-        log('  brew install things-cli');
+        error('Failed to install things3-cli. Please install manually:');
+        log('  brew install ossianhempel/tap/things3-cli');
         return false;
       }
-      success('things-cli installed successfully.');
+      success('things3-cli installed successfully.');
       return true;
     }
   }
 
-  error('Please install things-cli manually:');
-  log('  brew install things-cli');
-  log('  https://github.com/thingsapi/things-cli');
+  error('Please install things3-cli manually:');
+  log('  brew install ossianhempel/tap/things3-cli');
+  log('  https://github.com/ossianhempel/things3-cli');
   return false;
 }
 
 async function checkThingsCliNonInteractive(): Promise<boolean> {
   if (await commandExists('things')) return true;
-  error('things-cli is not installed. Run `bunx things3-bridge` interactively to set it up.');
+  error('things3-cli is not installed. Run `bunx things3-bridge` interactively to set it up.');
   return false;
 }
 

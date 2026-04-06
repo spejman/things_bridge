@@ -21,7 +21,7 @@ async function defaultRunner(args: string[]): Promise<string> {
         'Find the token in Things 3 > Settings > General > Things URLs.'
       );
     }
-    throw new Error(`things CLI failed: ${err}`);
+    throw new Error(`things3-cli failed: ${err}`);
   }
   return await new Response(proc.stdout).text();
 }
