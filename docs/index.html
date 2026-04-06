@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Things Provider — REST API for Things 3</title>
+  <meta name="description" content="REST API and web UI for Things 3 — full CRUD, undo support, and change history via things-cli">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0b0b0a;
+      --surface: #141413;
+      --surface-raised: #1a1a18;
+      --border: #2a2a26;
+      --border-subtle: #1f1f1c;
+      --text: #e8e2d6;
+      --text-secondary: #948e80;
+      --text-dim: #5c5850;
+      --accent: #c49a6c;
+      --accent-dim: #9a7a56;
+      --accent-glow: rgba(196, 154, 108, 0.08);
+      --code-bg: #111110;
+      --font-display: 'Instrument Serif', Georgia, serif;
+      --font-body: 'Outfit', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* --- Noise overlay --- */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 256px;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--text); }
+
+    /* --- Layout --- */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* --- Navigation --- */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1.25rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(11, 11, 10, 0.8);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-brand {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+
+    .nav-links a {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-weight: 400;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-github {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .nav-github svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    /* --- Hero --- */
+    .hero {
+      padding: 10rem 0 6rem;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-label {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-dim);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .hero-label::before {
+      content: '';
+      display: block;
+      width: 24px;
+      height: 1px;
+      background: var(--accent-dim);
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 7vw, 5rem);
+      font-weight: 400;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .hero-desc {
+      font-size: 1.15rem;
+      color: var(--text-secondary);
+      max-width: 540px;
+      line-height: 1.8;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      transition: all 0.25s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .btn-primary:hover {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--text-secondary);
+      color: var(--text);
+    }
+
+    /* --- Sections --- */
+    section {
+      padding: 5rem 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 2.5rem;
+      line-height: 1.15;
+    }
+
+    /* --- Features --- */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1px;
+      background: var(--border-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .feature {
+      background: var(--surface);
+      padding: 2rem;
+      transition: background 0.3s;
+    }
+
+    .feature:hover { background: var(--surface-raised); }
+
+    .feature-icon {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      letter-spacing: 0.05em;
+    }
+
+    .feature h3 {
+      font-family: var(--font-body);
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+
+    .feature p {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* --- Prerequisites --- */
+    .prereq-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .prereq-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .prereq-list li::before {
+      content: '';
+      display: block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      flex-shrink: 0;
+      transform: translateY(-1px);
+    }
+
+    .prereq-list code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      background: var(--surface);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      color: var(--accent);
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* --- Code blocks --- */
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 1.25rem 0;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+    }
+
+    .code-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .code-block pre {
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+
+    .code-block .cmd { color: var(--text); }
+    .code-block .comment { color: var(--text-dim); }
+    .code-block .string { color: var(--accent); }
+
+    /* --- API table --- */
+    .api-table-wrap {
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    thead {
+      background: var(--surface);
+    }
+
+    th {
+      text-align: left;
+      padding: 0.85rem 1.25rem;
+      font-weight: 500;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tbody tr { transition: background 0.2s; }
+    tbody tr:hover { background: var(--surface); }
+
+    .method {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .method-get { color: #6bc77a; background: rgba(107, 199, 122, 0.08); }
+    .method-post { color: #6ba3c7; background: rgba(107, 163, 199, 0.08); }
+    .method-patch { color: #c7b36b; background: rgba(199, 179, 107, 0.08); }
+    .method-delete { color: #c76b6b; background: rgba(199, 107, 107, 0.08); }
+
+    .endpoint {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--text);
+    }
+
+    .api-desc { color: var(--text-secondary); }
+
+    /* --- Config table --- */
+    .config-table code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+    }
+
+    .config-default {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    /* --- Footer --- */
+    footer {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-text {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .footer-links a {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+
+    .footer-links a:hover { color: var(--text-secondary); }
+
+    /* --- Responsive --- */
+    @media (max-width: 640px) {
+      nav { padding: 1rem 1.25rem; }
+      .nav-links { gap: 1rem; }
+      .nav-links a { font-size: 0.75rem; }
+      .container { padding: 0 1.25rem; }
+      .hero { padding: 8rem 0 4rem; }
+      section { padding: 3.5rem 0; }
+      .features-grid { grid-template-columns: 1fr; }
+      table { font-size: 0.8rem; }
+      th, td { padding: 0.6rem 0.85rem; }
+    }
+
+    /* --- Animations --- */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero-label, .hero h1, .hero-desc, .hero-actions {
+      animation: fadeUp 0.8s ease-out both;
+    }
+    .hero h1 { animation-delay: 0.1s; }
+    .hero-desc { animation-delay: 0.2s; }
+    .hero-actions { animation-delay: 0.3s; }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <span class="nav-brand">Things Provider</span>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#api">API</a>
+      <a href="#start">Setup</a>
+      <a href="https://github.com/spejman/things_bridge" class="nav-github">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="container">
+    <section class="hero" id="top">
+      <div class="hero-label">Open Source</div>
+      <h1>The <em>REST API</em><br>for Things 3</h1>
+      <p class="hero-desc">
+        A lightweight bridge that wraps the Things 3 macOS task manager
+        with a full REST API, web UI, and change history with undo support.
+      </p>
+      <div class="hero-actions">
+        <a href="#start" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/spejman/things_bridge" class="btn btn-secondary">View on GitHub</a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Features -->
+  <div class="container">
+    <section id="features">
+      <div class="section-label">Capabilities</div>
+      <h2 class="section-title">Everything you need to automate Things 3</h2>
+      <div class="features-grid">
+        <div class="feature">
+          <div class="feature-icon">GET POST PATCH DELETE</div>
+          <h3>Full CRUD</h3>
+          <p>Create, read, update, and delete tasks. Filter by status, project, area, or tag.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">POST /undo</div>
+          <h3>Undo Support</h3>
+          <p>Every mutation is logged. Reverse any change — create, update, complete, or delete.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">GET /log</div>
+          <h3>Change History</h3>
+          <p>Paginated audit trail of every operation, with before/after snapshots stored in SQLite.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">/ &mdash; Web UI</div>
+          <h3>Built-in Web UI</h3>
+          <p>React interface with inbox, today, upcoming, someday views. Manage tasks from any browser.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">Bearer &lt;token&gt;</div>
+          <h3>Token Auth</h3>
+          <p>Simple bearer token authentication on all API endpoints. Easy to integrate with any client.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">bun backup</div>
+          <h3>Backup System</h3>
+          <p>Export your entire Things 3 database to JSON. Scheduled or on-demand backups.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Getting Started -->
+  <div class="container">
+    <section id="start">
+      <div class="section-label">Quick Start</div>
+      <h2 class="section-title">Up and running in minutes</h2>
+
+      <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 1rem; color: var(--text-secondary);">Prerequisites</h3>
+      <ul class="prereq-list" style="margin-bottom: 2.5rem;">
+        <li>macOS with <a href="https://culturedcode.com/things/">Things 3</a> installed</li>
+        <li><a href="https://github.com/thingsapi/things-cli">things-cli</a> &mdash; <code>brew install things-cli</code></li>
+        <li><a href="https://bun.sh">Bun</a> &mdash; <code>curl -fsSL https://bun.sh/install | bash</code></li>
+      </ul>
+
+      <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 1rem; color: var(--text-secondary);">Install &amp; Configure</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-dot"></span>
+          <span class="code-dot"></span>
+          <span class="code-dot"></span>
+          terminal
+        </div>
+        <pre><span class="comment"># Clone and install</span>
+<span class="cmd">git clone https://github.com/spejman/things_bridge.git</span>
+<span class="cmd">cd things_bridge</span>
+<span class="cmd">bun install</span>
+
+<span class="comment"># Configure</span>
+<span class="cmd">cp .env.example .env</span>
+<span class="comment"># Edit .env with your bearer token</span>
+
+<span class="comment"># Start the server</span>
+<span class="cmd">bun dev</span></pre>
+      </div>
+
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 1.25rem;">
+        The server starts at <code style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent);">http://localhost:3000</code> with the web UI and API ready to use.
+      </p>
+    </section>
+  </div>
+
+  <!-- API Overview -->
+  <div class="container">
+    <section id="api">
+      <div class="section-label">Endpoints</div>
+      <h2 class="section-title">REST API reference</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 0.95rem;">
+        All <code style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent);">/api/*</code>
+        endpoints require <code style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent);">Authorization: Bearer &lt;token&gt;</code>.
+      </p>
+
+      <div class="api-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/tasks</td>
+              <td class="api-desc">List tasks with optional filters</td>
+            </tr>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/tasks/:id</td>
+              <td class="api-desc">Get a single task</td>
+            </tr>
+            <tr>
+              <td><span class="method method-post">POST</span></td>
+              <td class="endpoint">/api/tasks</td>
+              <td class="api-desc">Create a task</td>
+            </tr>
+            <tr>
+              <td><span class="method method-patch">PATCH</span></td>
+              <td class="endpoint">/api/tasks/:id</td>
+              <td class="api-desc">Update a task</td>
+            </tr>
+            <tr>
+              <td><span class="method method-post">POST</span></td>
+              <td class="endpoint">/api/tasks/:id/complete</td>
+              <td class="api-desc">Mark task completed</td>
+            </tr>
+            <tr>
+              <td><span class="method method-post">POST</span></td>
+              <td class="endpoint">/api/tasks/:id/cancel</td>
+              <td class="api-desc">Cancel a task</td>
+            </tr>
+            <tr>
+              <td><span class="method method-delete">DELETE</span></td>
+              <td class="endpoint">/api/tasks/:id</td>
+              <td class="api-desc">Trash a task</td>
+            </tr>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/areas</td>
+              <td class="api-desc">List areas</td>
+            </tr>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/projects</td>
+              <td class="api-desc">List projects</td>
+            </tr>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/tags</td>
+              <td class="api-desc">List tags</td>
+            </tr>
+            <tr>
+              <td><span class="method method-get">GET</span></td>
+              <td class="endpoint">/api/log</td>
+              <td class="api-desc">Paginated change history</td>
+            </tr>
+            <tr>
+              <td><span class="method method-post">POST</span></td>
+              <td class="endpoint">/api/undo/:entryId</td>
+              <td class="api-desc">Undo a logged change</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Configuration -->
+  <div class="container">
+    <section id="config">
+      <div class="section-label">Configuration</div>
+      <h2 class="section-title">Environment variables</h2>
+
+      <div class="api-table-wrap config-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Default</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>THINGS_PROVIDER_TOKEN</code></td>
+              <td class="config-default">(required)</td>
+              <td class="api-desc">Bearer token for API auth</td>
+            </tr>
+            <tr>
+              <td><code>THINGS_PROVIDER_PORT</code></td>
+              <td class="config-default">3000</td>
+              <td class="api-desc">Server port</td>
+            </tr>
+            <tr>
+              <td><code>THINGS_PROVIDER_DB_PATH</code></td>
+              <td class="config-default">~/.things-provider/change-log.db</td>
+              <td class="api-desc">SQLite path for change log</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <div class="container">
+    <footer>
+      <div class="footer-inner">
+        <span class="footer-text">MIT License &copy; Sergio Espeja</span>
+        <div class="footer-links">
+          <a href="https://github.com/spejman/things_bridge">GitHub</a>
+          <a href="https://github.com/spejman/things_bridge/issues">Issues</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+</body>
+</html>
