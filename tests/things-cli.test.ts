@@ -102,43 +102,44 @@ describe('ThingsCliService', () => {
     expect(tags).toHaveLength(2);
   });
 
-  test('updateTask calls update with title arg', async () => {
+  test('updateTask calls update with --id and title', async () => {
     let calledArgs: string[] = [];
     const runner = async (args: string[]) => { calledArgs = args; return ''; };
     const cli = new ThingsCliService(runner);
     await cli.updateTask('task-uuid', { title: 'Updated' });
     expect(calledArgs).toContain('update');
-    expect(calledArgs).toContain('task-uuid');
-    expect(calledArgs).toContain('--title');
+    expect(calledArgs).toContain('--id=task-uuid');
     expect(calledArgs).toContain('Updated');
   });
 
-  test('completeTask calls update --completed true', async () => {
+  test('completeTask calls update --id --completed', async () => {
     let calledArgs: string[] = [];
     const runner = async (args: string[]) => { calledArgs = args; return ''; };
     const cli = new ThingsCliService(runner);
     await cli.completeTask('task-uuid');
     expect(calledArgs).toContain('update');
+    expect(calledArgs).toContain('--id=task-uuid');
     expect(calledArgs).toContain('--completed');
-    expect(calledArgs).toContain('true');
   });
 
-  test('cancelTask calls cancel', async () => {
+  test('cancelTask calls update --canceled', async () => {
     let calledArgs: string[] = [];
     const runner = async (args: string[]) => { calledArgs = args; return ''; };
     const cli = new ThingsCliService(runner);
     await cli.cancelTask('task-uuid');
-    expect(calledArgs[0]).toBe('cancel');
-    expect(calledArgs[1]).toBe('task-uuid');
+    expect(calledArgs).toContain('update');
+    expect(calledArgs).toContain('--id=task-uuid');
+    expect(calledArgs).toContain('--canceled');
   });
 
-  test('deleteTask calls trash', async () => {
+  test('deleteTask calls delete with --id and --confirm', async () => {
     let calledArgs: string[] = [];
     const runner = async (args: string[]) => { calledArgs = args; return ''; };
     const cli = new ThingsCliService(runner);
     await cli.deleteTask('task-uuid');
-    expect(calledArgs[0]).toBe('trash');
-    expect(calledArgs[1]).toBe('task-uuid');
+    expect(calledArgs).toContain('delete');
+    expect(calledArgs).toContain('--id=task-uuid');
+    expect(calledArgs).toContain('--confirm=task-uuid');
   });
 
   test('getTaskById returns null for unknown id', async () => {

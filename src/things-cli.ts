@@ -128,26 +128,27 @@ export class ThingsCliService {
   }
 
   async updateTask(id: string, payload: Partial<UpdateTaskPayload>): Promise<void> {
-    const args = ['update', id];
-    if (payload.title !== undefined) args.push('--title', payload.title);
-    if (payload.notes !== undefined) args.push('--notes', payload.notes);
-    if (payload.whenDate !== undefined) args.push('--when', payload.whenDate ?? '');
-    else if (payload.when !== undefined) args.push('--when', payload.when ?? '');
-    if (payload.deadline !== undefined) args.push('--deadline', payload.deadline ?? '');
-    if (payload.completed !== undefined) args.push('--completed', payload.completed ? 'true' : 'false');
+    const args = ['update', `--id=${id}`];
+    if (payload.title !== undefined) args.push(payload.title);
+    if (payload.notes !== undefined) args.push(`--notes=${payload.notes}`);
+    if (payload.whenDate !== undefined) args.push(`--when=${payload.whenDate ?? ''}`);
+    else if (payload.when !== undefined) args.push(`--when=${payload.when ?? ''}`);
+    if (payload.deadline !== undefined) args.push(`--deadline=${payload.deadline ?? ''}`);
+    if (payload.completed === true) args.push('--completed');
+    if (payload.completed === false) args.push('--completed=false');
     await this.run(args);
   }
 
   async completeTask(id: string): Promise<void> {
-    await this.run(['update', id, '--completed', 'true']);
+    await this.run(['update', `--id=${id}`, '--completed']);
   }
 
   async cancelTask(id: string): Promise<void> {
-    await this.run(['cancel', id]);
+    await this.run(['update', `--id=${id}`, '--canceled']);
   }
 
   async deleteTask(id: string): Promise<void> {
-    await this.run(['trash', id]);
+    await this.run(['delete', `--id=${id}`, `--confirm=${id}`]);
   }
 
   async recreateTask(task: Task): Promise<string> {
