@@ -5,7 +5,7 @@ Use this skill to read and manage tasks in Things 3 via the things-provider REST
 ## Connection
 
 ```
-Base URL: <base-url>        (e.g. http://localhost:3000)
+Base URL: <base-url>        (e.g. http://localhost:2714)
 Auth:     Authorization: Bearer <token>   (required on all /api/* endpoints except /api/config)
 ```
 

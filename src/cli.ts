@@ -5,6 +5,13 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { platform } from 'node:os';
 import { createInterface } from 'node:readline';
+import {
+  resolveBunPath,
+  installService,
+  uninstallService,
+  getServiceStatus,
+  rotateLogs,
+} from './launchd.ts';
 
 const CONFIG_DIR = join(process.env['HOME'] ?? '.', '.things-provider');
 const ENV_FILE = join(CONFIG_DIR, '.env');
@@ -41,9 +48,19 @@ async function commandExists(cmd: string): Promise<boolean> {
   }
 }
 
-function parseArgs(): { port?: number; token?: string } {
-  const args = process.argv.slice(2);
-  const result: { port?: number; token?: string } = {};
+export interface CliArgs {
+  port?: number;
+  token?: string;
+  foreground?: boolean;
+  service?: boolean;
+  status?: boolean;
+  uninstall?: boolean;
+  logs?: boolean;
+}
+
+export function parseArgs(argv?: string[]): CliArgs {
+  const args = argv ?? process.argv.slice(2);
+  const result: CliArgs = {};
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port' && args[i + 1]) {
@@ -52,6 +69,16 @@ function parseArgs(): { port?: number; token?: string } {
     } else if (args[i] === '--token' && args[i + 1]) {
       result.token = args[i + 1];
       i++;
+    } else if (args[i] === '--foreground') {
+      result.foreground = true;
+    } else if (args[i] === '--service') {
+      result.service = true;
+    } else if (args[i] === '--status') {
+      result.status = true;
+    } else if (args[i] === '--uninstall') {
+      result.uninstall = true;
+    } else if (args[i] === '--logs') {
+      result.logs = true;
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
   things3-bridge — REST API for Things 3
@@ -59,9 +86,16 @@ function parseArgs(): { port?: number; token?: string } {
   Usage:
     bunx things3-bridge [options]
 
+  By default, installs a LaunchAgent that starts on login and runs
+  continuously in the background.
+
   Options:
-    --port <number>    Server port (default: 3000)
+    --port <number>    Server port (default: 2714)
     --token <string>   Bearer token for API auth (auto-generated if omitted)
+    --foreground       Run server directly without service management
+    --status           Show service status
+    --logs             Tail service logs in real time
+    --uninstall        Remove the LaunchAgent service
     -h, --help         Show this help message
 `);
       process.exit(0);
@@ -98,6 +132,15 @@ async function loadOrCreateToken(): Promise<string> {
 
   success(`Generated new token and saved to ${ENV_FILE}`);
   return token;
+}
+
+async function savePortToEnvFile(port: number): Promise<void> {
+  await mkdir(CONFIG_DIR, { recursive: true });
+
+  const envContent = existsSync(ENV_FILE) ? await readFile(ENV_FILE, 'utf-8') : '';
+  const lines = envContent.split('\n').filter((l) => !l.startsWith('THINGS_PROVIDER_PORT='));
+  lines.push(`THINGS_PROVIDER_PORT=${port}`);
+  await writeFile(ENV_FILE, lines.filter(Boolean).join('\n') + '\n');
 }
 
 // --- Preflight checks ---
@@ -149,23 +192,65 @@ async function checkThingsCli(): Promise<boolean> {
   return false;
 }
 
-// --- Main ---
+async function checkThingsCliNonInteractive(): Promise<boolean> {
+  if (await commandExists('things')) return true;
+  error('things-cli is not installed. Run `bunx things3-bridge` interactively to set it up.');
+  return false;
+}
 
-async function main() {
-  const args = parseArgs();
+// --- Command handlers ---
 
-  if (!(await checkMacOS())) process.exit(1);
-  if (!(await checkThings3())) process.exit(1);
-  if (!(await checkThingsCli())) process.exit(1);
+async function handleStatus(): Promise<void> {
+  const status = await getServiceStatus();
+  console.log('');
+  if (status.installed) {
+    if (status.running) {
+      success(`Service is running (PID: ${status.pid})`);
+    } else {
+      log('Service is installed but not running.');
+    }
+    console.log(`  Port:   ${status.port ?? 'unknown'}`);
+    console.log(`  Plist:  ${status.plistPath}`);
+    console.log(`  Logs:   ${status.logPaths.stdout}`);
+    console.log(`          ${status.logPaths.stderr}`);
+  } else {
+    log('Service is not installed. Run `bunx things3-bridge` to install.');
+  }
+  console.log('');
+}
 
-  // Resolve token: CLI arg > env var > saved file > generate
-  const token = args.token ?? process.env['THINGS_PROVIDER_TOKEN'] ?? (await loadOrCreateToken());
-  const port = args.port ?? parseInt(process.env['THINGS_PROVIDER_PORT'] ?? '3000', 10);
+async function handleUninstall(): Promise<void> {
+  await uninstallService();
+  success('LaunchAgent service removed.');
+  log('The server will no longer start on login.');
+}
 
-  // Set env vars so the existing config/server code picks them up
-  process.env['THINGS_PROVIDER_TOKEN'] = token;
-  process.env['THINGS_PROVIDER_PORT'] = String(port);
+async function handleLogs(): Promise<void> {
+  const status = await getServiceStatus();
+  const { stdout, stderr } = status.logPaths;
 
+  if (!existsSync(stdout) && !existsSync(stderr)) {
+    log('No log files found. Is the service installed?');
+    return;
+  }
+
+  log('Tailing logs (Ctrl+C to stop)...');
+  console.log('');
+
+  const proc = Bun.spawn(['tail', '-f', stdout, stderr], {
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+
+  process.on('SIGINT', () => {
+    proc.kill();
+    process.exit(0);
+  });
+
+  await proc.exited;
+}
+
+async function startForegroundServer(port: number, token: string): Promise<void> {
   // Start the server (import dynamically so env is set first)
   await import('./index.ts');
 
@@ -178,7 +263,101 @@ async function main() {
   log('Press Ctrl+C to stop.');
 }
 
-main().catch((err) => {
-  error(err.message);
-  process.exit(1);
-});
+async function handleInstallAndStart(port: number, token: string): Promise<void> {
+  const status = await getServiceStatus();
+
+  if (status.running) {
+    console.log('');
+    success(`Service is already running (PID: ${status.pid})`);
+    console.log('');
+    console.log(`  URL:    \x1b[1mhttp://localhost:${status.port ?? port}\x1b[0m`);
+    console.log(`  Logs:   ${status.logPaths.stdout}`);
+    console.log('');
+    log('Use --foreground to run directly, --uninstall to remove.');
+    return;
+  }
+
+  log('Installing LaunchAgent service...');
+  const bunPath = await resolveBunPath();
+  await installService({ bunPath });
+
+  const newStatus = await getServiceStatus();
+  console.log('');
+  if (newStatus.running) {
+    success('Things 3 Bridge service installed and running!');
+  } else {
+    success('Things 3 Bridge service installed.');
+    log('Check logs if it failed to start:');
+  }
+  console.log('');
+  console.log(`  URL:    \x1b[1mhttp://localhost:${port}\x1b[0m`);
+  console.log(`  Token:  \x1b[1m${token}\x1b[0m`);
+  console.log(`  Plist:  ${newStatus.plistPath}`);
+  console.log(`  Logs:   ${newStatus.logPaths.stdout}`);
+  console.log('');
+  log('The service will start automatically on login.');
+  log('Use --status to check, --uninstall to remove.');
+}
+
+// --- Main ---
+
+async function main() {
+  const args = parseArgs();
+
+  // Handle --status, --logs, --uninstall early (no preflight needed)
+  if (args.status) {
+    await handleStatus();
+    return;
+  }
+
+  if (args.logs) {
+    await handleLogs();
+    return;
+  }
+
+  if (args.uninstall) {
+    await handleUninstall();
+    return;
+  }
+
+  // Preflight checks
+  if (!(await checkMacOS())) process.exit(1);
+  if (!(await checkThings3())) process.exit(1);
+
+  if (args.service) {
+    // Non-interactive mode for launchd
+    if (!(await checkThingsCliNonInteractive())) process.exit(1);
+  } else {
+    if (!(await checkThingsCli())) process.exit(1);
+  }
+
+  // Resolve token and port
+  const token = args.token ?? process.env['THINGS_PROVIDER_TOKEN'] ?? (await loadOrCreateToken());
+  const port = args.port ?? parseInt(process.env['THINGS_PROVIDER_PORT'] ?? '2714', 10);
+
+  // Save port to env file so the service picks it up
+  await savePortToEnvFile(port);
+
+  // Set env vars so the existing config/server code picks them up
+  process.env['THINGS_PROVIDER_TOKEN'] = token;
+  process.env['THINGS_PROVIDER_PORT'] = String(port);
+
+  if (args.foreground || args.service) {
+    // Rotate logs on service startup (before launchd opens new file handles)
+    if (args.service) {
+      await rotateLogs();
+    }
+    await startForegroundServer(port, token);
+    return;
+  }
+
+  // Default: install and manage LaunchAgent
+  await handleInstallAndStart(port, token);
+}
+
+if (import.meta.main) {
+  main().catch((err) => {
+    error(err.message);
+    process.exit(1);
+  });
+}

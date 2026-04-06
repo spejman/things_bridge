@@ -16,7 +16,7 @@ export function loadConfig(): Config {
     : rawDbPath;
 
   return {
-    port: parseInt(process.env['THINGS_PROVIDER_PORT'] ?? '3000', 10),
+    port: parseInt(process.env['THINGS_PROVIDER_PORT'] ?? '2714', 10),
     dbPath,
     token,
   };

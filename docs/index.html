@@ -574,8 +574,9 @@
       </div>
 
       <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 1.25rem;">
-        That's it. The CLI checks for dependencies, generates an API token, and starts the server
-        at <code style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent);">http://localhost:3000</code> with the web UI and API ready to use.
+        That's it. The CLI checks for dependencies, generates an API token, and installs a
+        LaunchAgent that starts on login and runs continuously in the background at
+        <code style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent);">http://localhost:2714</code>.
       </p>
 
       <div class="code-block" style="margin-top: 1.5rem;">
@@ -586,7 +587,11 @@
           options
         </div>
         <pre><span class="cmd">bunx things3-bridge --port 8080</span>          <span class="comment"># custom port</span>
-<span class="cmd">bunx things3-bridge --token my-secret</span>    <span class="comment"># custom token</span></pre>
+<span class="cmd">bunx things3-bridge --token my-secret</span>    <span class="comment"># custom token</span>
+<span class="cmd">bunx things3-bridge --foreground</span>         <span class="comment"># run directly (no service)</span>
+<span class="cmd">bunx things3-bridge --status</span>             <span class="comment"># check service status</span>
+<span class="cmd">bunx things3-bridge --logs</span>               <span class="comment"># tail service logs</span>
+<span class="cmd">bunx things3-bridge --uninstall</span>           <span class="comment"># remove the service</span></pre>
       </div>
 
       <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 1rem; margin-top: 2.5rem; color: var(--text-secondary);">Prerequisites</h3>
@@ -707,7 +712,7 @@
             </tr>
             <tr>
               <td><code>THINGS_PROVIDER_PORT</code></td>
-              <td class="config-default">3000</td>
+              <td class="config-default">2714</td>
               <td class="api-desc">Server port</td>
             </tr>
             <tr>
