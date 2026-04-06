@@ -8,9 +8,8 @@ const THINGS_STATUS = { OPEN: 0, CANCELED: 2, COMPLETED: 3 } as const;
 export type CliRunner = (args: string[]) => Promise<string>;
 
 async function defaultRunner(args: string[]): Promise<string> {
-  const authToken = process.env['THINGS_AUTH_TOKEN'];
-  const fullArgs = authToken ? ['--auth-token', authToken, ...args] : args;
-  const proc = Bun.spawn(['things', ...fullArgs], { stdout: 'pipe', stderr: 'pipe' });
+  const env = { ...process.env };
+  const proc = Bun.spawn(['things', ...args], { stdout: 'pipe', stderr: 'pipe', env });
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
     const err = await new Response(proc.stderr).text();
