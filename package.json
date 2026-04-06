@@ -1,0 +1,24 @@
+{
+  "name": "things-provider",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "backup": "bun src/backup-cli.ts"
+  },
+  "dependencies": {
+    "react": "^18",
+    "react-dom": "^18",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
