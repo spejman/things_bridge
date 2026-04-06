@@ -1,32 +1,32 @@
-# Things Provider
+# Things 3 Bridge
 
 A REST API that wraps the [Things 3](https://culturedcode.com/things/) macOS task manager via the `things` CLI, providing a web UI and full CRUD operations with undo support.
 
-## Prerequisites
+## Quick Start
+
+```bash
+bunx things3-bridge
+```
+
+The CLI checks for dependencies (offering to install `things-cli` via Homebrew if missing), generates an API token on first run, and starts the server at `http://localhost:3000`.
+
+```bash
+bunx things3-bridge --port 8080        # custom port
+bunx things3-bridge --token my-secret  # custom token
+```
+
+### Prerequisites
 
 - macOS with [Things 3](https://culturedcode.com/things/) installed
-- [things-cli](https://github.com/thingsapi/things-cli): `brew install things-cli`
 - [Bun](https://bun.sh): `curl -fsSL https://bun.sh/install | bash`
+- [things-cli](https://github.com/thingsapi/things-cli) (auto-installed if missing)
 
-## Setup
+### Development
 
 ```bash
 bun install
-cp .env.example .env
-# Edit .env with your token
+bun dev    # hot reload
 ```
-
-## Usage
-
-```bash
-# Development (hot reload)
-bun dev
-
-# Production
-bun start
-```
-
-The server starts at `http://localhost:3000` (configurable via `THINGS_PROVIDER_PORT`).
 
 ## Configuration
 
