@@ -2,15 +2,7 @@ import { z } from 'zod';
 import { CreateTaskPayloadSchema } from '../shared/index.ts';
 import type { ThingsCliService } from '../things-cli.ts';
 import type { ChangeLog } from '../change-log.ts';
-import { requireAuth } from '../auth.ts';
-
-function isAuthTokenError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes('auth token');
-}
-
-function authTokenErrorResponse(err: Error): Response {
-  return Response.json({ error: err.message }, { status: 503 });
-}
+import { requireAuth, isAuthTokenError, authTokenErrorResponse } from '../auth.ts';
 
 const UpdateBodySchema = z.object({
   title: z.string().min(1).optional(),

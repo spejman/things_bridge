@@ -13,8 +13,8 @@ export interface ThingsBackup {
 
 export async function createBackup(cli: ThingsCliService): Promise<ThingsBackup> {
   const [areas, projects, tags, tasks] = await Promise.all([
-    cli.getAreas(),
-    cli.getProjects(),
+    cli.getRawAreas(),
+    cli.getRawProjects(),
     cli.getTags(),
     cli.getRawTasks(),
   ]);

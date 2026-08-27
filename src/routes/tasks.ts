@@ -30,22 +30,6 @@ export async function handleGetTask(req: any, cli: ThingsCliService, token: stri
   return Response.json(task);
 }
 
-export async function handleGetAreas(req: Request, cli: ThingsCliService, token: string): Promise<Response> {
-  const auth = requireAuth(req, token);
-  if (auth) return auth;
-  return Response.json(await cli.getAreas());
-}
-
-export async function handleGetProjects(req: Request, cli: ThingsCliService, token: string): Promise<Response> {
-  const auth = requireAuth(req, token);
-  if (auth) return auth;
-  const url = new URL(req.url);
-  const areaId = url.searchParams.get('areaId') ?? undefined;
-  let projects = await cli.getProjects() as any[];
-  if (areaId) projects = projects.filter((p) => p.area_id === areaId);
-  return Response.json(projects);
-}
-
 export async function handleGetTags(req: Request, cli: ThingsCliService, token: string): Promise<Response> {
   const auth = requireAuth(req, token);
   if (auth) return auth;

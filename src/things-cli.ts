@@ -1,5 +1,5 @@
-import type { Task, CreateTaskPayload, UpdateTaskPayload } from './shared/index.ts';
-import { TASK_STATUS } from './shared/index.ts';
+import type { Task, CreateTaskPayload, UpdateTaskPayload, Project, CreateProjectPayload, UpdateProjectPayload, Area, CreateAreaPayload, UpdateAreaPayload } from './shared/index.ts';
+import { TASK_STATUS, PROJECT_STATUS } from './shared/index.ts';
 
 const BRIDGE_ID_PREFIX = 'BridgeID:';
 
@@ -71,6 +71,35 @@ function toIso(d: string | null | undefined): string | null {
   return d.replace(' ', 'T') + 'Z';
 }
 
+export function mapThingsProjectToProject(p: any): Project {
+  let status: Project['status'] = PROJECT_STATUS.ACTIVE;
+
+  if (p.trashed === true) {
+    status = PROJECT_STATUS.TRASH;
+  } else if (p.status === THINGS_STATUS.COMPLETED) {
+    status = PROJECT_STATUS.COMPLETED;
+  } else if (p.status === THINGS_STATUS.CANCELED) {
+    status = PROJECT_STATUS.CANCELED;
+  }
+
+  return {
+    id: p.uuid,
+    title: p.title,
+    status,
+    areaId: p.area_id || null,
+    areaTitle: p.area_title || null,
+    tags: p.tags || [],
+  };
+}
+
+export function mapThingsAreaToArea(a: any): Area {
+  return {
+    id: a.uuid,
+    title: a.title,
+    visible: a.visible ?? true,
+  };
+}
+
 export class ThingsCliService {
   constructor(private run: CliRunner = defaultRunner) {}
 
@@ -84,18 +113,38 @@ export class ThingsCliService {
     return tasks.find((t) => t.id === id) ?? null;
   }
 
-  async getAreas(): Promise<unknown[]> {
+  async getAreas(): Promise<Area[]> {
     const json = await this.run(['areas', '--json']);
-    return JSON.parse(json);
+    return JSON.parse(json).map(mapThingsAreaToArea);
   }
 
-  async getProjects(): Promise<unknown[]> {
+  async getAreaById(id: string): Promise<Area | null> {
+    const areas = await this.getAreas();
+    return areas.find((a) => a.id === id) ?? null;
+  }
+
+  async getProjects(): Promise<Project[]> {
     const json = await this.run(['projects', '--json', '--all']);
-    return JSON.parse(json);
+    return JSON.parse(json).map(mapThingsProjectToProject);
+  }
+
+  async getProjectById(id: string): Promise<Project | null> {
+    const projects = await this.getProjects();
+    return projects.find((p) => p.id === id) ?? null;
   }
 
   async getTags(): Promise<unknown[]> {
     const json = await this.run(['tags', '--json']);
+    return JSON.parse(json);
+  }
+
+  async getRawAreas(): Promise<unknown[]> {
+    const json = await this.run(['areas', '--json']);
+    return JSON.parse(json);
+  }
+
+  async getRawProjects(): Promise<unknown[]> {
+    const json = await this.run(['projects', '--json', '--all']);
     return JSON.parse(json);
   }
 
@@ -163,5 +212,65 @@ export class ThingsCliService {
       deadline: task.deadline ?? undefined,
       whenDate: task.whenDate ?? undefined,
     });
+  }
+
+  async createProject(payload: CreateProjectPayload): Promise<string> {
+    const args = ['add-project', payload.title];
+    if (payload.notes) args.push('--notes', payload.notes);
+    if (payload.when) args.push('--when', payload.when);
+    else if (payload.whenDate) args.push('--when', payload.whenDate);
+    if (payload.deadline) args.push('--deadline', payload.deadline);
+    if (payload.tags?.length) args.push('--tags', payload.tags.join(','));
+    if (payload.areaId) args.push('--area-id', payload.areaId);
+
+    await this.run(args);
+
+    // Things CLI doesn't return the created ID; find by title match
+    const projects = await this.getProjects();
+    const project = projects.find((p) => p.title === payload.title);
+    if (!project) throw new Error('Could not find project by title after creation');
+    return project.id;
+  }
+
+  async updateProject(id: string, payload: Partial<UpdateProjectPayload>): Promise<void> {
+    const args = ['update-project', `--id=${id}`];
+    if (payload.title !== undefined) args.push(payload.title);
+    if (payload.notes !== undefined) args.push(`--notes=${payload.notes}`);
+    if (payload.areaId !== undefined) args.push(`--area-id=${payload.areaId ?? ''}`);
+    if (payload.whenDate !== undefined) args.push(`--when=${payload.whenDate ?? ''}`);
+    else if (payload.when !== undefined) args.push(`--when=${payload.when ?? ''}`);
+    if (payload.deadline !== undefined) args.push(`--deadline=${payload.deadline ?? ''}`);
+    if (payload.tags !== undefined) args.push(`--tags=${payload.tags.join(',')}`);
+    if (payload.completed === true) args.push('--completed');
+    if (payload.canceled === true) args.push('--canceled');
+    await this.run(args);
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.run(['delete-project', `--id=${id}`, `--confirm=${id}`]);
+  }
+
+  async createArea(payload: CreateAreaPayload): Promise<string> {
+    const args = ['add-area', payload.title];
+    if (payload.tags?.length) args.push('--tags', payload.tags.join(','));
+
+    await this.run(args);
+
+    // Things CLI doesn't return the created ID; find by title match
+    const areas = await this.getAreas();
+    const area = areas.find((a) => a.title === payload.title);
+    if (!area) throw new Error('Could not find area by title after creation');
+    return area.id;
+  }
+
+  async updateArea(id: string, payload: Partial<UpdateAreaPayload>): Promise<void> {
+    const args = ['update-area', `--id=${id}`];
+    if (payload.title !== undefined) args.push(payload.title);
+    if (payload.tags !== undefined) args.push(`--tags=${payload.tags.join(',')}`);
+    await this.run(args);
+  }
+
+  async deleteArea(id: string): Promise<void> {
+    await this.run(['delete-area', `--id=${id}`, `--confirm=${id}`]);
   }
 }

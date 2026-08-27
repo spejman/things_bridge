@@ -41,16 +41,25 @@ Replace `<base-url>` with the server address and `<token>` with your `THINGS_PRO
 ### Area
 
 ```json
-{ "uuid": "string", "title": "string" }
+{
+  "id": "string (Things ID)",
+  "title": "string",
+  "visible": true
+}
 ```
 
 ### Project
 
 ```json
-{ "uuid": "string", "title": "string", "area_id": "string | null", "area_title": "string | null", "status": 0, "trashed": false }
+{
+  "id": "string (Things ID)",
+  "title": "string",
+  "status": "active | completed | canceled | trash",
+  "areaId": "string | null",
+  "areaTitle": "string | null",
+  "tags": ["string"]
+}
 ```
-
-`status: 0` = active, `status: 3` = completed.
 
 ### Tag
 
@@ -143,9 +152,81 @@ curl -H "Authorization: Bearer <token>" "<base-url>/api/areas"
 
 ---
 
+### GET /api/areas/:id
+
+Get a single area by ID.
+
+**Response:** `Area`
+
+```bash
+curl -H "Authorization: Bearer <token>" "<base-url>/api/areas/<area-id>"
+```
+
+---
+
+### POST /api/areas
+
+Create a new area.
+
+**Body (JSON):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | yes | Area title |
+| `tags` | string[] | | Tag names |
+
+**Response:** `{ id, area }` — HTTP 201
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Personal"}' \
+  "<base-url>/api/areas"
+```
+
+---
+
+### PATCH /api/areas/:id
+
+Update an existing area. Only supplied fields are changed.
+
+**Body (JSON) — all optional:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | New title |
+| `tags` | string[] | Replace all tags |
+
+**Response:** `{ area }`
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Renamed Area"}' \
+  "<base-url>/api/areas/<area-id>"
+```
+
+---
+
+### DELETE /api/areas/:id
+
+Delete an area.
+
+**Response:** `{ deleted: true }`
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  "<base-url>/api/areas/<area-id>"
+```
+
+---
+
 ### GET /api/projects
 
-List active (non-completed, non-trashed) projects.
+List all projects.
 
 **Query params (optional):**
 
@@ -161,6 +242,90 @@ curl -H "Authorization: Bearer <token>" "<base-url>/api/projects"
 
 # Projects in an area
 curl -H "Authorization: Bearer <token>" "<base-url>/api/projects?areaId=<area-id>"
+```
+
+---
+
+### GET /api/projects/:id
+
+Get a single project by ID.
+
+**Response:** `Project`
+
+```bash
+curl -H "Authorization: Bearer <token>" "<base-url>/api/projects/<project-id>"
+```
+
+---
+
+### POST /api/projects
+
+Create a new project.
+
+**Body (JSON):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | yes | Project title |
+| `notes` | string | | Body/notes |
+| `when` | `today` `evening` `tomorrow` `this-weekend` `next-week` `someday` | | Schedule shorthand |
+| `whenDate` | date string | | Explicit schedule date |
+| `deadline` | date string | | Hard deadline |
+| `tags` | string[] | | Tag names |
+| `areaId` | string | | Assign to area |
+
+**Response:** `{ id, project }` — HTTP 201
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Q2 Planning","areaId":"<area-id>"}' \
+  "<base-url>/api/projects"
+```
+
+---
+
+### PATCH /api/projects/:id
+
+Update an existing project. Only supplied fields are changed.
+
+**Body (JSON) — all optional:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | New title |
+| `notes` | string | New notes (replaces existing) |
+| `when` | `today` `evening` `tomorrow` `this-weekend` `next-week` `someday` or `null` | Reschedule |
+| `whenDate` | date string or `null` | Explicit date or clear it |
+| `deadline` | date string or `null` | Set/clear deadline |
+| `tags` | string[] | Replace all tags |
+| `areaId` | string or `null` | Move to area or clear |
+| `completed` | boolean | Complete/uncomplete |
+| `canceled` | boolean | Cancel/uncancel |
+
+**Response:** `{ project }`
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Q2 Planning (Final)"}' \
+  "<base-url>/api/projects/<project-id>"
+```
+
+---
+
+### DELETE /api/projects/:id
+
+Delete a project.
+
+**Response:** `{ deleted: true }`
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  "<base-url>/api/projects/<project-id>"
 ```
 
 ---
@@ -365,7 +530,7 @@ curl -X POST \
 |--------|---------|
 | 400 | Invalid request body (validation failed) |
 | 401 | Missing or invalid bearer token |
-| 404 | Task or log entry not found |
+| 404 | Task, project, area, or log entry not found |
 | 422 | Undo not possible (missing snapshot data) |
 | 500 | Things CLI failure — body contains stderr |
 

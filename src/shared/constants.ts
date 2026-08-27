@@ -8,3 +8,10 @@ export const TASK_STATUS = {
   CANCELED: 'canceled',
   TRASH: 'trash',
 } as const;
+
+export const PROJECT_STATUS = {
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  CANCELED: 'canceled',
+  TRASH: 'trash',
+} as const;

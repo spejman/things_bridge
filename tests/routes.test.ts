@@ -52,8 +52,10 @@ function makeRawTask(t: Task) {
   };
 }
 
-// Tracks the "current" task state for the mock (mutations update this)
+// Tracks the "current" state for the mock (mutations update these)
 let currentTaskState: Task = { ...sampleTask };
+let currentProjectTitle = 'P1';
+let currentAreaTitle = 'Work';
 
 beforeAll(() => {
   db = new Database(':memory:');
@@ -61,8 +63,8 @@ beforeAll(() => {
 
   const runner = async (args: string[]): Promise<string> => {
     if (args[0] === 'tasks') return JSON.stringify([makeRawTask(currentTaskState)]);
-    if (args[0] === 'areas') return JSON.stringify([{ uuid: 'area-1', title: 'Work' }]);
-    if (args[0] === 'projects') return JSON.stringify([{ uuid: 'proj-1', title: 'P1', area_id: 'area-1' }]);
+    if (args[0] === 'areas') return JSON.stringify([{ uuid: 'area-1', title: currentAreaTitle, visible: false }]);
+    if (args[0] === 'projects') return JSON.stringify([{ uuid: 'proj-1', title: currentProjectTitle, area_id: 'area-1', area_title: 'Work', status: 0, trashed: false }]);
     if (args[0] === 'tags') return JSON.stringify(['work', 'personal']);
     if (args[0] === 'add') {
       // Simulate creating a task: update currentTaskState to have a BridgeID in notes
@@ -71,7 +73,17 @@ beforeAll(() => {
       currentTaskState = { ...sampleTask, id: 'new-task-id', notes: bridgeNotes };
       return '';
     }
-    if (args[0] === 'update' || args[0] === 'cancel' || args[0] === 'trash') return '';
+    if (args[0] === 'add-project') {
+      currentProjectTitle = args[1];
+      return '';
+    }
+    if (args[0] === 'add-area') {
+      currentAreaTitle = args[1];
+      return '';
+    }
+    if (args[0] === 'update' || args[0] === 'update-project' || args[0] === 'update-area') return '';
+    if (args[0] === 'cancel' || args[0] === 'trash') return '';
+    if (args[0] === 'delete' || args[0] === 'delete-project' || args[0] === 'delete-area') return '';
     return '';
   };
 
@@ -134,22 +146,27 @@ describe('GET /api/tasks/:id', () => {
 });
 
 describe('GET /api/areas', () => {
-  test('returns areas', async () => {
+  test('returns mapped areas', async () => {
     const res = await fetch(`${BASE}/api/areas`, { headers: auth() });
     expect(res.status).toBe(200);
-    const body = await res.json() as unknown[];
+    const body = await res.json() as any[];
     expect(body).toBeArray();
     expect(body).toHaveLength(1);
+    expect(body[0].id).toBe('area-1');
+    expect(body[0].title).toBeString();
   });
 });
 
 describe('GET /api/projects', () => {
-  test('returns projects', async () => {
+  test('returns mapped projects', async () => {
     const res = await fetch(`${BASE}/api/projects`, { headers: auth() });
     expect(res.status).toBe(200);
-    const body = await res.json() as unknown[];
+    const body = await res.json() as any[];
     expect(body).toBeArray();
     expect(body).toHaveLength(1);
+    expect(body[0].id).toBe('proj-1');
+    expect(body[0].areaId).toBe('area-1');
+    expect(body[0].status).toBe('active');
   });
 });
 
@@ -278,5 +295,171 @@ describe('POST /api/undo/:entryId', () => {
     expect(undoBody.entryId).toBeString();
     // The undo entryId should be different from the original
     expect(undoBody.entryId).not.toBe(entryId);
+  });
+});
+
+// --- Project CRUD ---
+
+describe('GET /api/projects/:id', () => {
+  test('returns a project by id', async () => {
+    const res = await fetch(`${BASE}/api/projects/proj-1`, { headers: auth() });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.id).toBe('proj-1');
+  });
+
+  test('returns 404 for unknown project', async () => {
+    const res = await fetch(`${BASE}/api/projects/unknown`, { headers: auth() });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /api/projects', () => {
+  test('creates a project and returns id', async () => {
+    currentProjectTitle = 'P1';
+    const res = await fetch(`${BASE}/api/projects`, {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'New Project' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { id: string; project: any };
+    expect(body.id).toBeString();
+  });
+
+  test('returns 400 for missing title', async () => {
+    const res = await fetch(`${BASE}/api/projects`, {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'no title' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('PATCH /api/projects/:id', () => {
+  test('updates a project', async () => {
+    currentProjectTitle = 'P1';
+    const res = await fetch(`${BASE}/api/projects/proj-1`, {
+      method: 'PATCH',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Updated Project' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { project: any };
+    expect(body.project).toBeDefined();
+  });
+
+  test('returns 404 for unknown project', async () => {
+    const res = await fetch(`${BASE}/api/projects/unknown`, {
+      method: 'PATCH',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Nope' }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /api/projects/:id', () => {
+  test('deletes a project', async () => {
+    currentProjectTitle = 'P1';
+    const res = await fetch(`${BASE}/api/projects/proj-1`, {
+      method: 'DELETE',
+      headers: auth(),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { deleted: boolean };
+    expect(body.deleted).toBe(true);
+  });
+
+  test('returns 404 for unknown project', async () => {
+    const res = await fetch(`${BASE}/api/projects/unknown`, {
+      method: 'DELETE',
+      headers: auth(),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// --- Area CRUD ---
+
+describe('GET /api/areas/:id', () => {
+  test('returns an area by id', async () => {
+    const res = await fetch(`${BASE}/api/areas/area-1`, { headers: auth() });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.id).toBe('area-1');
+  });
+
+  test('returns 404 for unknown area', async () => {
+    const res = await fetch(`${BASE}/api/areas/unknown`, { headers: auth() });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /api/areas', () => {
+  test('creates an area and returns id', async () => {
+    currentAreaTitle = 'Work';
+    const res = await fetch(`${BASE}/api/areas`, {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'New Area' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { id: string; area: any };
+    expect(body.id).toBeString();
+  });
+
+  test('returns 400 for missing title', async () => {
+    const res = await fetch(`${BASE}/api/areas`, {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('PATCH /api/areas/:id', () => {
+  test('updates an area', async () => {
+    currentAreaTitle = 'Work';
+    const res = await fetch(`${BASE}/api/areas/area-1`, {
+      method: 'PATCH',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Updated Area' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { area: any };
+    expect(body.area).toBeDefined();
+  });
+
+  test('returns 404 for unknown area', async () => {
+    const res = await fetch(`${BASE}/api/areas/unknown`, {
+      method: 'PATCH',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Nope' }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /api/areas/:id', () => {
+  test('deletes an area', async () => {
+    currentAreaTitle = 'Work';
+    const res = await fetch(`${BASE}/api/areas/area-1`, {
+      method: 'DELETE',
+      headers: auth(),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { deleted: boolean };
+    expect(body.deleted).toBe(true);
+  });
+
+  test('returns 404 for unknown area', async () => {
+    const res = await fetch(`${BASE}/api/areas/unknown`, {
+      method: 'DELETE',
+      headers: auth(),
+    });
+    expect(res.status).toBe(404);
   });
 });

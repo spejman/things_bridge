@@ -22,8 +22,8 @@ interface Task {
   canceledAt: string | null;
 }
 
-interface Area { uuid: string; title: string; }
-interface Project { uuid: string; title: string; area_id: string | null; status: number; trashed: boolean; }
+interface Area { id: string; title: string; visible: boolean; }
+interface Project { id: string; title: string; status: string; areaId: string | null; areaTitle: string | null; tags: string[]; }
 interface Tag { uuid: string; title: string; }
 
 interface ChangeEntry {
@@ -119,7 +119,7 @@ export default function App() {
 
   useEffect(() => {
     Promise.all([api.getAreas(), api.getProjects(), api.getTags()])
-      .then(([a, p, t]) => { setAreas(a); setProjects((p as Project[]).filter((proj) => proj.status !== 3 && !proj.trashed)); setTags(t); })
+      .then(([a, p, t]) => { setAreas(a); setProjects((p as Project[]).filter((proj) => proj.status === 'active')); setTags(t); })
       .catch((e) => setError(String(e)));
   }, []);
 
@@ -207,8 +207,8 @@ export default function App() {
     if (v === 'upcoming') return 'Upcoming';
     if (v === 'someday') return 'Someday';
     if (v === 'logbook') return 'Logbook';
-    if (typeof v === 'object' && v.type === 'project') return projects.find((p) => p.uuid === v.id)?.title ?? v.id;
-    if (typeof v === 'object' && v.type === 'area') return areas.find((a) => a.uuid === v.id)?.title ?? v.id;
+    if (typeof v === 'object' && v.type === 'project') return projects.find((p) => p.id === v.id)?.title ?? v.id;
+    if (typeof v === 'object' && v.type === 'area') return areas.find((a) => a.id === v.id)?.title ?? v.id;
     if (typeof v === 'object' && v.type === 'tag') return `#${v.name}`;
     return '';
   };
@@ -309,9 +309,9 @@ function Sidebar({
         {navBtn('Logbook', 'logbook', '✅')}
       </div>
 
-      {projects.filter((p) => !p.area_id).length > 0 && (
+      {projects.filter((p) => !p.areaId).length > 0 && (
         <div style={{ marginTop: 8 }}>
-          {projects.filter((p) => !p.area_id).map((proj) => navBtn(proj.title, { type: 'project', id: proj.uuid }, '📋'))}
+          {projects.filter((p) => !p.areaId).map((proj) => navBtn(proj.title, { type: 'project', id: proj.id }, '📋'))}
         </div>
       )}
 
@@ -319,16 +319,16 @@ function Sidebar({
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#8e8e93', padding: '4px 12px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Areas</div>
           {areas.map((area) => {
-            const areaProjects = projects.filter((p) => p.area_id === area.uuid);
-            const expanded = expandedAreas.has(area.uuid);
-            const areaView: View = { type: 'area', id: area.uuid };
+            const areaProjects = projects.filter((p) => p.areaId === area.id);
+            const expanded = expandedAreas.has(area.id);
+            const areaView: View = { type: 'area', id: area.id };
             return (
-              <div key={area.uuid}>
+              <div key={area.id}>
                 <button
                   onClick={() => {
                     setExpandedAreas((prev) => {
                       const next = new Set(prev);
-                      expanded ? next.delete(area.uuid) : next.add(area.uuid);
+                      expanded ? next.delete(area.id) : next.add(area.id);
                       return next;
                     });
                     setView(areaView);
@@ -344,10 +344,10 @@ function Sidebar({
                   {area.title}
                 </button>
                 {expanded && areaProjects.map((proj) => {
-                  const projView: View = { type: 'project', id: proj.uuid };
+                  const projView: View = { type: 'project', id: proj.id };
                   return (
                     <button
-                      key={proj.uuid}
+                      key={proj.id}
                       onClick={() => setView(projView)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 8, width: '100%',
